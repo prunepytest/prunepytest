@@ -45,33 +45,33 @@ jobs:
           name: wheels-linux-${{ matrix.platform.target }}
           path: pyext/dist
 
-  musllinux:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        platform:
-          - runner: ubuntu-latest
-            target: x86_64
-          - runner: ubuntu-latest
-            target: aarch64
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.7
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist
-          working-directory: pyext
-          sccache: 'true'
-          manylinux: musllinux_1_2
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-musllinux-${{ matrix.platform.target }}
-          path: pyext/dist
+#  musllinux:
+#    runs-on: ${{ matrix.platform.runner }}
+#    strategy:
+#      matrix:
+#        platform:
+#          - runner: ubuntu-latest
+#            target: x86_64
+#          - runner: ubuntu-latest
+#            target: aarch64
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-python@v5
+#        with:
+#          python-version: 3.7
+#      - name: Build wheels
+#        uses: PyO3/maturin-action@v1
+#        with:
+#          target: ${{ matrix.platform.target }}
+#          args: --release --out dist
+#          working-directory: pyext
+#          sccache: 'true'
+#          manylinux: musllinux_1_2
+#      - name: Upload wheels
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: wheels-musllinux-${{ matrix.platform.target }}
+#          path: pyext/dist
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
