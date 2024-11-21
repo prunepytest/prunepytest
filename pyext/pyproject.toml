@@ -4,13 +4,30 @@ build-backend = "maturin"
 
 [project]
 name = "testfully"
+description = "only test relevant files"
 requires-python = ">=3.7"
+authors = [
+    { name="Hugues Bruant", email="hugues@betakappaphi.com" },
+]
+readme = "README.md"
 classifiers = [
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Testing",
+
 ]
 dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/huguesb/testfully"
+Issues = "https://github.com/huguesb/testfully/issues"
 
 [tool.maturin]
 # Control the platform tag on linux
