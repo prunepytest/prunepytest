@@ -1,0 +1,82 @@
+© 2024, Hugues Bruant <hugues.bruant@gmail.com>
+
+Public Benefit Public License, v0.1
+
+1. Redistribution
+
+Redistribution in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+  1.1. Redistributions of source code must retain the above copyright notice,
+  and a verbatim copy of this license.
+
+  1.2. Redistributions in binary form must reproduce the above copyright notice,
+  and a verbatim copy of this license in the documentation and/or other materials
+  provided with the distribution.
+
+
+2. Usage restrictions
+
+  2.1. "Personal Use" is defined as: use of the software, in source or binary
+  form, with or without modification, by a single individual, where the inputs
+  given to the software, and the outputs produced by the software, are kept
+  solely in that individual's custody, and not shared with any other individual
+  or entity.
+
+  2.2. "Public Use" is defined as: use of the software, in source or binary
+  form, with or without modification, by any entity, where all inputs given to
+  the software are publicly available, and licensed under any combination of:
+
+   - OSI-approved licenses,
+     where OSI stands for the Open Source Initiative (TIN 91-2037395)
+     https://opensource.org/licenses
+
+   - FSF-approved licenses,
+     where FSF stands for the Free Software Foundation (TIN 04-2888848)
+     https://www.fsf.org/licensing
+
+   - this license
+
+
+  2.3. "Trial Use" is defined as: use of the software, in source or binary form,
+  with or without modification, by any entity, for any purpose, on no more than
+  15 calendar days within any calendar year.
+
+  2.4. "Approved Private Use" is defined as: use of the software, in source or
+  binary form, with or without modification, for any purpose, by an entity
+  which has obtained written permission from the copyright holder.
+
+  2.5. Any use beyond mere distribution of copies, with or without modification,
+  that does not fit the definition of one of "Personal use", "Public Use",
+  "Trial Use", or "Approved Private Use" above, by any entity, for any purpose,
+  is expressly forbidden.
+
+
+3. Duration of restrictions
+
+  Any copyrightable work covered by this license shall become exempt from all
+  usage restrictions set forth in section 2 above, on the fourth anniversary of
+  its public release.
+
+  The copyright holder may, at their discretion, issue a written statement
+  lifting those usage restrictions at an earlier date.
+
+  Once usage restrictions are lifted, it becomes permissible for any entity
+  to redistribute and use the work under the terms of the 2-clause BSD license.
+  https://opensource.org/license/bsd-2-clause
+
+
+4. Disclaimer
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
