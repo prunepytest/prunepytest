@@ -1,0 +1,27 @@
+[package]
+name = "common"
+version = "0.4.0"
+publish = false
+edition = {  workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+
+[lib]
+
+[dependencies]
+walkdir = { workspace = true }
+ignore = { workspace = true }
+dashmap = { workspace = true }
+rayon = { workspace = true }
+ustr = { workspace = true }
+log = { workspace = true }
+ruff_python_parser = { workspace = true }
+ruff_python_ast = { workspace = true }
+ruff_text_size = { workspace = true }
+pyo3 = { workspace = true }
+regex = { workspace = true }
+speedy = { workspace = true }
+hi_sparse_bitset = { workspace = true }
+zstd = { workspace = true }

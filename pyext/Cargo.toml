@@ -1,0 +1,20 @@
+[package]
+name = "pyext"
+version = "0.4.0"
+publish = false
+edition = {  workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+
+[lib]
+name = "testfully"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { workspace = true }
+pyo3 = { workspace = true }
+log = { workspace = true }
+fern = { workspace = true }
+ustr = { workspace = true }

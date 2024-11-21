@@ -1,0 +1,35 @@
+[workspace]
+members = ["common", "pyext", "cmd"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.80"
+homepage = "https://github.com/huguesb/testfully"
+documentation = "https://github.com/huguesb/testfully"
+repository = "https://github.com/huguesb/testfully"
+authors = ["Hugues Bruant <hugues.bruant@gmail.com>"]
+
+[workspace.dependencies]
+common = { path = "common" }
+cmd = { path = "cmd" }
+pyext = { path = "pyext" }
+
+pyo3 = {  version = "0.22.5", features = ["abi3-py37"] }
+walkdir = "2.5"
+ignore = "0.4.23"
+log = "0.4.22"
+fern = "0.7.0"
+dashmap = "6.1"
+rayon = "1.10.0"
+regex = "1.11.1"
+speedy = "0.8.7"
+ustr = "1.1.0"
+hi_sparse_bitset = "0.6.1"
+zstd = "0.13"
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.7.3" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.7.3" }
+ruff_text_size = { git = "https://github.com/astral-sh/ruff.git", tag = "0.7.3" }
+
+[profile.release]
+debug = 1
