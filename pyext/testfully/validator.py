@@ -49,7 +49,7 @@ from typing import Any, Callable, Dict, Set
 from .util import print_with_timestamp, import_file, load_import_graph, is_test_file
 
 
-def import_with_capture(fq, c_out, c_err):
+def import_with_capture(fq: str, c_out: bool, c_err: bool):
     with io.StringIO() as f:
         with contextlib.redirect_stdout(f) if c_out else contextlib.nullcontext(), \
                 contextlib.redirect_stderr(f) if c_err else contextlib.nullcontext():
@@ -98,7 +98,7 @@ def recursive_import_tests(path: str, import_prefix: str, hook: Any,
     return imported
 
 
-def validate(py_tracked, rust_graph, filter_fn: Callable[[str], bool], package = None) -> int:
+def validate(py_tracked: Dict[str, Set[str]], rust_graph, filter_fn: Callable[[str], bool], package = None) -> int:
     diff_count = 0
     for module, pydeps in py_tracked.items():
         if not filter_fn(module):

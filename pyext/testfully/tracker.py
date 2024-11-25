@@ -158,7 +158,7 @@ class Tracker:
         setattr(bs, '_find_and_load', _new_find_and_load)
 
         # we also override builtins __import__ to point to importlib's version
-        # why? because the builtins hit the module cache too early, leading
+        # why? because the builtins hits the module cache too early, leading
         # to inconsistent results depending on the order in which modules are
         # loaded
         self.old_builtins_import = builtins.__import__
@@ -173,7 +173,7 @@ class Tracker:
         builtins.__import__ = self.old_builtins_import
 
 
-    def with_dynamic(self, m):
+    def with_dynamic(self, m) -> Set[str]:
         dyn = {
             i
             for u in self.dynamic_users.get(m, ())
@@ -296,7 +296,7 @@ class Tracker:
                     self.cxt.discard(name)
 
 
-    def add_dynamic_usage_recorder(self, module, module_name, fn_name):
+    def add_dynamic_usage_recorder(self, module: str, module_name: str, fn_name: str) -> None:
         """
         Wraps a given function from a given module to record subsequent usages from
         other modules.

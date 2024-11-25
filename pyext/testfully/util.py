@@ -10,7 +10,7 @@ from . import ModuleGraph
 mono_ref = time.monotonic_ns()
 
 
-def print_with_timestamp(*args, **kwargs):
+def print_with_timestamp(*args, **kwargs) -> None:
     wall_elapsed_ms = (time.monotonic_ns() - mono_ref) // 1_000_000
     (
         kwargs['file'] if 'file' in kwargs else sys.stdout
