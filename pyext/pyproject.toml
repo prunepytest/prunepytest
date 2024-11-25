@@ -6,6 +6,9 @@ build-backend = "maturin"
 name = "testfully"
 description = "only test relevant files"
 requires-python = ">=3.7"
+dependencies = [
+    "pluggy>=1.2"
+]
 authors = [
     { name="Hugues Bruant", email="hugues@betakappaphi.com" },
 ]
@@ -28,6 +31,9 @@ dynamic = ["version"]
 [project.urls]
 Homepage = "https://github.com/huguesb/testfully"
 Issues = "https://github.com/huguesb/testfully/issues"
+
+[project.entry-points.pytest11]
+testfully = "testfully.plugin"
 
 [tool.maturin]
 # Control the platform tag on linux

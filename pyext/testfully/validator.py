@@ -1,35 +1,52 @@
+"""
+Usage: python -m testfully.validator <path/to/hook.py> [<path/to/serialized/graph>]
+
+Purpose:
+
+This file is part of a multi-prong system to validate the soundness of testfully
+for a given codebase.
+
+Specifically, it is concerned with validating that the transitive closure
+of dependencies for a set of test files is computed properly, to give
+confidence in the computation of its transpose: the set of affected tests to
+run given a set of modified files.
+
+Python import tracking is a *very hard* problem, because arbitrary Python
+code can be executed at import time, and arbitrary imports can be loaded
+at run time! We deal with that as follows:
+
+ - the rust parser goes deep, extracting import statements even in code that
+   might never be executed (it does however ignore typechecking-only
+   imports). These are not going to be reported by the Python validator
+   and that's OK. Better to have false positives (detected imports that
+   are not used) than false negatives (undetected imports).
+
+ - this validator actually runs arbitrary python code during import
+   tracking, because that's how Python rolls, so it is able to find
+   dynamically-loaded imports, provided they are resolved at import-time
+   (i.e. triggered by a module-level statement). This is good as it shows
+   blind spots in the rust parser and gives us an opportunity to make those
+   dynamic dependencies explicit. This is useful as a first pass before
+   attempting to actually run tests under testfully as it gives quicker,
+   though less accurate, feedback on the use of dynamic dependencies.
+
+ - the pytest plugin tracks imports while tests are actually running, and
+   is able to enforce that no unexpected imports are used.
+
+
+"""
+
+import contextlib
 import importlib
 import importlib.util
+import io
 import os
 import sys
-import time
 import traceback
 
 from typing import Any, Callable, Dict, Set
 
-
-mono_ref = time.monotonic_ns()
-
-
-def print_with_timestamp(*args, **kwargs):
-    wall_elapsed_ms = (time.monotonic_ns() - mono_ref) // 1_000_000
-    (
-        kwargs['file'] if 'file' in kwargs else sys.stdout
-    ).write("[+{: 8}ms] ".format(wall_elapsed_ms))
-    print(*args, **kwargs)
-
-
-def import_file(name: str, filepath: str) -> Any:
-    spec = importlib.util.spec_from_file_location(name, filepath)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def is_test_file(name: str) -> bool:
-    # https://docs.pytest.org/en/latest/explanation/goodpractices.html#test-discovery
-    return (name.startswith("test_") and name.endswith('.py')) or name.endswith("_test.py")
+from .util import print_with_timestamp, import_file, load_import_graph, is_test_file
 
 
 def import_with_capture(fq, c_out, c_err):
@@ -101,48 +118,9 @@ def validate(py_tracked, rust_graph, filter_fn: Callable[[str], bool], package =
 
 
 if __name__ == '__main__':
-    """
-    Usage: validator <path/to/hook.py> [<path/to/serialized/graph>]
-    
-    Purpose:
-    
-    This files is part of a multi-pronged system to validate the correctness of
-    the rust-implemented ModuleGraph provided by this package.
-    
-    Specifically, it is concerned with validating that, the transitive closure
-    of dependencies for a set of test files is computed properly, to give
-    confidence in the computation of its transpose: the set of affected tests to
-    run given a set of modified files.
-       
-    Python import tracking is a *very hard* problem, because arbitrary Python
-    code can be executed at import time, and arbitrary imports can be loaded
-    at run time! We do our best to deal with that as follows:
-     - the rust parser goes deep, extracting import statements even in code that
-       might never be executed (it does however ignore typechecking-only
-       imports). These are not going to be reported by the Python validator
-       and that's OK. Better to have false positives (detected imports that
-       are not used) than false negatives (undetected imports).
-     - the python validator actually runs arbitrary python code during import
-       tracking, because that's how Python rolls, so it is able to find
-       dynamically-loaded imports, provided they are resolved at import-time
-       (i.e. triggered by a module-level statement). This is good as it shows
-       blind spots in the rust parser and gives us an opportunity to make those
-       dynamic dependencies explicit.
-     - neither the rust parser nor the python validator can catch dependencies
-       that are resolved dynamically at run-time. Those are generally not a
-       good idea exactly because they escape static analysis and are a major
-       source of bugs. These are addressed in a separate validation step that
-       need to be incorporated in the actual test runner, to detect whether a
-       given test had run-time dynamic imports not covered by the validator.
-    
-        
-    """
-    import io
-    import contextlib
+    hook = import_file("testfully._hook", sys.argv[1])
 
-    hook = import_file("_validator_hook", sys.argv[1])
-
-    from . import ModuleGraph, tracker
+    from . import tracker
 
     t = tracker.Tracker()
     t.start_tracking(hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
@@ -156,30 +134,7 @@ if __name__ == '__main__':
     if hasattr(hook, 'setup'):
         hook.setup()
 
-    # TODO: we could move most of this into a separate thread
-    # load graph from file if provided, otherwise parse the repo
-    if len(sys.argv) > 2 and os.path.exists(sys.argv[2]):
-        print_with_timestamp("--- loading existing rust-based import graph")
-        g = ModuleGraph.from_file(sys.argv[2])
-    else:
-        print_with_timestamp("--- building fresh import graph using rust extension")
-        g = ModuleGraph(
-            hook.package_map(),
-            hook.GLOBAL_NAMESPACES,     # unified namespace
-            hook.LOCAL_NAMESPACES,      # per-pkg namespace
-            getattr(hook, 'EXTERNAL_IMPORTS', set()) | {'importlib', '__import__'},
-            getattr(hook, 'dynamic_dependencies', dict)()
-        )
-
-        if hasattr(hook, 'dynamic_dependencies_at_edges'):
-            print_with_timestamp("--- computing dynamic dependencies")
-            unified, per_pkg = hook.dynamic_dependencies_at_edges()
-            print_with_timestamp("--- incorporating dynamic dependencies")
-            g.add_dynamic_dependencies_at_edges(unified, per_pkg)
-
-        if len(sys.argv) > 2:
-            print_with_timestamp("--- saving import graph")
-            g.to_file(sys.argv[2])
+    g = load_import_graph(hook, sys.argv[2] if len(sys.argv) > 2 else None)
 
     # keep track or errors and import differences
     files_with_missing_imports = 0
@@ -224,22 +179,9 @@ if __name__ == '__main__':
                     tracker.omit_tracker_frames(tb)
                 )
 
-        # test_dyn = {m: v for m, v in t.dynamic_users.items() if m.partition('.')[0] == sub}
-        # if test_dyn:
-        #     print(test_dyn)
-        # print(t.dynamic_imports)
-
         with_dynamic = {}
         for m in imported:
-            dyn_raw = {
-                i
-                for u in t.dynamic_users.get(m, ())
-                for i in t.dynamic_imports.get(u, ())
-            }
-            dyn_new = dyn_raw - t.tracked[m]
-            # if dyn_new:
-            #      print(f"{m}: +{len(dyn_new)}/{len(dyn_raw)} dynamic from {t.dynamic_users.get(m)}")
-            with_dynamic[m] = t.tracked[m] | dyn_new
+            with_dynamic[m] = t.with_dynamic(m)
 
         # NB: do validation at the package level for the test namespace
         # this is necessary because it is not a unified namespace. There can be
@@ -278,20 +220,12 @@ if __name__ == '__main__':
             hook.after_folder(base, sub)
 
 
-    t.disable_tracking()
+    t.stop_tracking()
 
     if t.dynamic and getattr(hook, 'RECORD_DYNAMIC', False):
         print_with_timestamp(f"--- locations of dynamic imports")
-        # TODO: allow whitelisting of expected sites
-        #  1. trim down the stack trace up to the relevant function
-        #  2. maybe only count number of occurrences of these, or hide them
         dedup_stack = set()
-        whitelisted = 0
-        is_whitelisted_dynamic_import = getattr(hook, 'is_whitelisted_dynamic_import', None)
         for dyn_stack in t.dynamic:
-            if is_whitelisted_dynamic_import and is_whitelisted_dynamic_import(dyn_stack):
-                whitelisted += 1
-                continue
             as_tuple = tuple((f.filename, f.lineno) for f in dyn_stack)
             if as_tuple in dedup_stack:
                 continue

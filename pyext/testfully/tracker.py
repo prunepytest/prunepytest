@@ -145,12 +145,21 @@ class Tracker:
         builtins.__import__ = _builtins_import_no_cache
 
 
-    def disable_tracking(self) -> None:
+    def stop_tracking(self) -> None:
         if self.log_file:
             self.log_file.close()
 
         setattr(getattr(importlib, '_bootstrap'), '_find_and_load', self.old_find_and_load)
         builtins.__import__ = self.old_builtins_import
+
+
+    def with_dynamic(self, m):
+        dyn = {
+            i
+            for u in self.dynamic_users.get(m, ())
+            for i in self.dynamic_imports.get(u, ())
+        }
+        return self.tracked[m] | dyn
 
 
     def _find_and_load_helper(self, name: str, import_: Any) -> Any:
