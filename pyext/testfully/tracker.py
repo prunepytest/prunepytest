@@ -7,6 +7,26 @@ from functools import wraps
 from typing import Any, Iterable, Mapping, Optional, Set, Tuple
 
 
+EMPTY_SET = frozenset()
+
+
+IGNORED_FRAMES = {
+    __file__,
+    "<frozen importlib._bootstrap>",
+    "<frozen importlib._bootstrap_external>",
+}
+def omit_tracker_frames(tb: traceback.StackSummary) -> Iterable[traceback.FrameSummary]:
+    """
+    Remove stack frames associated with the import machinery or our hooking into it.
+    This makes it easier to analyze any error that might be reported by the validator
+    """
+    return (frame for frame in tb if frame.filename not in IGNORED_FRAMES)
+
+
+def is_validator_frame(frame: traceback.FrameSummary):
+    return frame.name == 'import_with_capture' and frame.filename.endswith('validator.py')
+
+
 def _apply_patch(o: object, attr_name: str, attr_val: Any) -> None:
     p = attr_name.split('.')
     for n in p[:-1]:
@@ -391,24 +411,3 @@ class Tracker:
         if anchor is None:
             self.dynamic.append(dyn_stack)
         return prev_stack, anchor
-
-
-
-EMPTY_SET = frozenset()
-
-
-IGNORED_FRAMES = {
-    __file__,
-    "<frozen importlib._bootstrap>",
-    "<frozen importlib._bootstrap_external>",
-}
-def omit_tracker_frames(tb: traceback.StackSummary) -> Iterable[traceback.FrameSummary]:
-    """
-    Remove stack frames associated with the import machinery or our hooking into it.
-    This makes it easier to analyze any error that might be reported by the validator
-    """
-    return (frame for frame in tb if frame.filename not in IGNORED_FRAMES)
-
-
-def is_validator_frame(frame: traceback.FrameSummary):
-    return frame.name == 'import_with_capture' and frame.filename.endswith('validator.py')
