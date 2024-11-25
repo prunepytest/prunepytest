@@ -53,7 +53,7 @@ class Tracker:
     __slots__ = ('stack', 'cxt', 'tracked', 'old_find_and_load', 'old_builtins_import',
                  'dynamic', 'dynamic_stack', 'dynamic_imports', 'dynamic_users',
                  'dynamic_anchors', 'dynamic_ignores', 'file_to_module',
-                 'log_file', 'patches')
+                 'log_file', 'prefixes', 'patches')
 
     def __init__(self):
         self.stack = [""]
@@ -76,6 +76,7 @@ class Tracker:
         # map: file path to module path
         self.file_to_module = {}
         self.log_file = None
+        self.prefixes = set()
         self.patches = None
 
     def start_tracking(self, prefixes: Set[str],
@@ -101,6 +102,7 @@ class Tracker:
         bs = getattr(importlib, '_bootstrap')
         self.old_find_and_load = getattr(bs, '_find_and_load')
 
+        self.prefixes = prefixes
         self.patches = patches
         self.dynamic_anchors = dynamic_anchors
         self.dynamic_ignores = dynamic_ignores
@@ -121,7 +123,7 @@ class Tracker:
         def _new_find_and_load(name: str, import_: Any) -> Any:
             # only track relevant namespace
             base_ns = name.partition('.')[0]
-            if base_ns not in prefixes:
+            if base_ns not in self.prefixes:
                 return self.old_find_and_load(name, import_)
 
             dynamic_idx, dynamic_anchor = self.record_dynamic_imports(
@@ -172,6 +174,13 @@ class Tracker:
         setattr(getattr(importlib, '_bootstrap'), '_find_and_load', self.old_find_and_load)
         builtins.__import__ = self.old_builtins_import
 
+    def enter_context(self, cxt):
+        self.stack.append(cxt)
+
+    def exit_context(self, expected):
+        actual = self.stack.pop()
+        if actual != expected:
+            raise ValueError(f"mismatching context entry/exit: {actual} != {expected}")
 
     def with_dynamic(self, m) -> Set[str]:
         dyn = {
@@ -388,6 +397,7 @@ class Tracker:
         # look for the first occurrence of a known aggregation point in the relevant
         # portion of the stack trace, or for an ignore point
         anchor = None
+        last_candidate = None
         for i, frame in enumerate(dyn_stack):
             mod = self.file_to_module.get(frame.filename)
             if not mod:
@@ -400,6 +410,13 @@ class Tracker:
             ):
                 anchor = (mod, frame.name)
                 break
+            if mod.partition('.')[0] in self.prefixes:
+                last_candidate = (mod, frame.name)
+
+        # if no explicit aggregation point is found, pick the topmost stack entry that
+        # corresponds to a module being tracked
+        if not anchor:
+            anchor = last_candidate
 
         if self.log_file:
             print(f"dynamic:{' ' * len(self.stack)}: {anchor}", file=self.log_file)

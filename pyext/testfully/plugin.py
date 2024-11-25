@@ -125,11 +125,14 @@ class TestfullyValidate:
         self.rel_root = rel_root
         self.tracker = Tracker()
         self.tracker.start_tracking(
+            # TODO: sane default for simple repos to allow hook-free invocation
             hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
             patches=None,
             record_dynamic=True,
             dynamic_anchors=getattr(hook, 'DYNAMIC_AGGREGATE', None),
             dynamic_ignores=getattr(hook, 'DYNAMIC_IGNORE', None),
+            # TODO: override from pytest config?
+            log_file=getattr(hook, 'TRACKER_LOG', None),
         )
         self.files_to_validate = set()
         self.file_to_import = {}
@@ -192,7 +195,20 @@ class TestfullyValidate:
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
     def pytest_runtest_logstart(self, nodeid, location):
-        self.files_to_validate.add(location[0])
+        f = location[0]
+        self.files_to_validate.add(f)
+        import_path = f[:-3].replace('/', '.')
+        self.tracker.enter_context(import_path)
+
+        return (yield)
+
+
+    @pytest.hookimpl(tryfirst=True, hookwrapper=True)
+    def pytest_runtest_logfinish(self, nodeid, location):
+        f = location[0]
+        import_path = f[:-3].replace('/', '.')
+        self.tracker.exit_context(import_path)
+
         return (yield)
 
 
