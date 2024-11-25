@@ -412,11 +412,3 @@ def omit_tracker_frames(tb: traceback.StackSummary) -> Iterable[traceback.FrameS
 
 def is_validator_frame(frame: traceback.FrameSummary):
     return frame.name == 'import_with_capture' and frame.filename.endswith('validator.py')
-
-
-def get_stack() -> traceback.StackSummary:
-    try:
-        raise ValueError()
-    except ValueError as e:
-        return traceback.extract_tb(e.__traceback__)
-
