@@ -104,18 +104,17 @@ class Tracker:
 
         self.prefixes = prefixes
         self.patches = patches
-        self.dynamic_anchors = dynamic_anchors
-        self.dynamic_ignores = dynamic_ignores
+        self.dynamic_anchors = dynamic_anchors or set()
+        self.dynamic_ignores = dynamic_ignores or set()
 
         # resolve anchors to already-loaded modules
         # the rest will be resolved as needed when relevant modules are loaded
         for mod_name, m in sys.modules.items():
             if hasattr(m, '__file__'):
                 self.file_to_module[m.__file__] = mod_name
-            if mod_name in dynamic_anchors:
+            if dynamic_anchors and mod_name in dynamic_anchors:
                 for fn in dynamic_anchors[mod_name]:
                     self.add_dynamic_usage_recorder(m, mod_name, fn)
-
         if log_file:
             self.log_file = open(log_file, 'a')
             print("--- start tracking ---", file=self.log_file)
@@ -169,6 +168,11 @@ class Tracker:
 
     def stop_tracking(self) -> None:
         if self.log_file:
+            print("--- stop tracking ", file= self.log_file)
+            print("tracked: ", self.tracked, file= self.log_file)
+            print("dynamic imports:", self.dynamic_imports, file= self.log_file)
+            print("dynamic users:", self.dynamic_users, file= self.log_file)
+            # TODO: avoid closing stdout/stderr
             self.log_file.close()
 
         setattr(getattr(importlib, '_bootstrap'), '_find_and_load', self.old_find_and_load)
@@ -195,7 +199,8 @@ class Tracker:
         new_context = False
         self.cxt.add(name)
         if self.log_file:
-            print(f"tracked:{' ' * len(self.stack)}{name} {'*' if name in self.tracked else ' '}", file=self.log_file)
+            flag = '*' if name in self.tracked else ('+' if name in sys.modules else ' ')
+            print(f"tracked:{' ' * len(self.stack)}{name} {flag}", file=self.log_file)
         if name in self.tracked:
             # we're already tracking this one
             #  - fully resolved: tracked[] has the full transitive deps

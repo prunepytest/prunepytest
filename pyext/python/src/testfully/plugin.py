@@ -86,7 +86,19 @@ def pytest_addoption(parser, pluginmanager):
 
 def pytest_configure(config):
     opt = config.option
-    hook = import_file("testfully._hook", opt.testfully_hook)
+    if not opt.testfully:
+        return
+
+    # old versions of pluggy do not have force_exception...
+    import pluggy
+    if pluggy.__version__ < '1.2':
+        raise ValueError('testfully requires pluggy>=1.2')
+
+    if opt.testfully_hook:
+        hook = import_file("testfully._hook", opt.testfully_hook)
+    else:
+        # TODO: provide sensible defaults
+        pass
 
     if opt.testfully_graph_root:
         rel_root = config.rootpath.relative_to(opt.testfully_graph_root)
