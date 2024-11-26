@@ -184,7 +184,7 @@ fn configure_logger<'py>(file: String, level: String) -> PyResult<()> {
 
 
 #[pymodule]
-fn testfully(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _testfully(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ModuleGraph>()?;
     m.add_function(wrap_pyfunction!(configure_logger, m)?)?;
     Ok(())
