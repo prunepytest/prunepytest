@@ -47,6 +47,10 @@ def load_import_graph(hook, file: Optional[str]) -> ModuleGraph:
             getattr(hook, 'dynamic_dependencies', dict)()
         )
 
+        unresolved = g.unresolved()
+        if unresolved:
+            print(f"unresolved: {unresolved}")
+
         if hasattr(hook, 'dynamic_dependencies_at_edges'):
             print_with_timestamp("--- computing dynamic dependencies")
             unified, per_pkg = hook.dynamic_dependencies_at_edges()

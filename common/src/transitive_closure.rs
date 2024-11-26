@@ -10,7 +10,7 @@ use ustr::{ustr, Ustr, UstrSet};
 use hi_sparse_bitset::{BitSet};
 use hi_sparse_bitset::config::{_128bit};
 use log::{debug, warn};
-use crate::moduleref::{ModuleRef, ModuleRefCache, ModuleRefVal};
+use crate::moduleref::{read_ustr_with_buf, write_ustr_to, ModuleRef, ModuleRefCache, ModuleRefVal};
 
 type CondensedRef = usize;
 type CondensedNode = HashSet<ModuleRef>;
@@ -30,12 +30,27 @@ pub struct TransitiveClosure {
 
     // map CondensedRef -> Set of CondensedRef ancestors (transitive closure)
     ancestor: Vec<CondensedEdges>,
+
+    //
+    pub unresolved: HashMap<Ustr, HashSet<ModuleRef>>
+}
+
+impl TransitiveClosure {
+    pub fn unresolved(&self) -> HashMap<String, HashSet<String>> {
+        HashMap::from_iter(self.unresolved.iter().map(|(k, v)| (
+            k.to_string(),
+            HashSet::from_iter(v.iter().map(|&r|
+                self.module_refs.fs_for_ref(r).to_string()
+            ))
+        )))
+    }
 }
 
 impl TransitiveClosure {
     pub fn from(
         g: &DashMap<ModuleRef, HashSet<ModuleRef>>,
         refs: ModuleRefCache,
+        unresolved: HashMap<Ustr, HashSet<ModuleRef>>
     ) -> TransitiveClosure {
         let n = refs.max_value() as usize;
         let mut state = StackTC{
@@ -70,6 +85,7 @@ impl TransitiveClosure {
             condensed_to_mod: state.scc,
             successor: state.succ,
             ancestor,
+            unresolved,
         }
     }
 
@@ -521,6 +537,17 @@ where
                 w.write_u64_varint(dep as u64)?;
             }
         }
+
+        let n = self.unresolved.len();
+        write_length_u64_varint(n, w)?;
+        for (&m, refs) in &self.unresolved {
+            write_ustr_to(m, w)?;
+            let l = refs.len();
+            write_length_u64_varint(l, w)?;
+            for &r in refs {
+                w.write_u64_varint(r as u64)?;
+            }
+        }
         Ok(())
     }
 }
@@ -565,12 +592,26 @@ where
             ancestor.push(anc);
         }
 
+        let n = read_length_u64_varint(reader)?;
+        let mut buf: Vec<u8> = Vec::new();
+        let mut unresolved = HashMap::with_capacity(n);
+        for _ in 0..n {
+            let m = read_ustr_with_buf(reader, &mut buf)?;
+            let l = read_length_u64_varint(reader)?;
+            let mut modules = HashSet::with_capacity(l);
+            for _ in 0..l {
+                modules.insert(reader.read_u64_varint()? as ModuleRef);
+            }
+            unresolved.insert(m, modules);
+        }
+
         Ok(TransitiveClosure{
             module_refs,
             mod_to_condensed,
             condensed_to_mod,
             successor,
             ancestor,
+            unresolved,
         })
     }
 }

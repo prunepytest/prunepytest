@@ -75,6 +75,11 @@ impl ModuleGraph {
         })
     }
 
+    #[pyo3(signature = ())]
+    fn unresolved<'py>(&self) -> PyResult<HashMap<String, HashSet<String>>> {
+        Ok(self.tc.unresolved())
+    }
+
     #[pyo3(signature = (filepath))]
     fn to_file<'py>(&self, py: Python<'py>, filepath: &str) -> PyResult<()> {
         py.allow_threads(|| self.tc.to_file(filepath))

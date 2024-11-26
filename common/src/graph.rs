@@ -32,6 +32,7 @@ pub struct ModuleGraph {
 
     // collected imports
     global_ns: DashMap<ModuleRef, HashSet<ModuleRef>>,
+    unresolved: DashMap<Ustr, HashSet<ModuleRef>>,
 }
 
 impl ModuleGraph {
@@ -52,6 +53,7 @@ impl ModuleGraph {
             to_module_cache: DashMap::new(),
             dir_cache: DashMap::new(),
             global_ns: DashMap::new(),
+            unresolved: DashMap::new(),
         }
     }
 
@@ -88,6 +90,7 @@ impl ModuleGraph {
             return
         }
 
+        let mut unresolved= HashSet::new();
         let mut imports = HashSet::new();
 
         for dep in deps {
@@ -122,6 +125,14 @@ impl ModuleGraph {
                 }
             } else if let Some(dep_ref) = self.to_module_local_aware(pkg, ustr(&dep)) {
                 imports.insert(dep_ref);
+            } else if self.is_local(&dep).is_some() {
+                // record relevant imports that cannot be resolved
+                // NB: if resolution failed, we know that we also fail to find the parent
+                // so record that, to reduce noise from many function/classes from a single
+                // unresolved module
+                if let Some(idx) = dep.rfind('.') {
+                    unresolved.insert(ustr(&dep[..idx]));
+                }
             }
         }
 
@@ -148,6 +159,9 @@ impl ModuleGraph {
                 self.modules_refs.get_or_create(filepath, module, None)
             }
         };
+        for un in unresolved {
+            self.unresolved.entry(un).or_default().insert(module_ref);
+        }
         if nspkg && self.global_ns.contains_key(&module_ref) {
             // for the weird, rare case where ns pkg init has some imports, need to merge
             self.global_ns.get_mut(&module_ref).unwrap().extend(imports);
@@ -443,7 +457,11 @@ impl ModuleGraph {
     pub fn finalize(self) -> TransitiveClosure {
         let module_refs = self.modules_refs.take();
         reify_deps(&self.global_ns, &module_refs);
-        TransitiveClosure::from(&self.global_ns, module_refs)
+        let mut unresolved = HashMap::with_capacity(self.unresolved.len());
+        for (k, v) in self.unresolved {
+            unresolved.insert(k, v);
+        }
+        TransitiveClosure::from(&self.global_ns, module_refs, unresolved)
     }
 }
 
