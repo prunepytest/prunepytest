@@ -1,5 +1,6 @@
 import builtins
 import importlib
+import io
 import sys
 import traceback
 from functools import wraps
@@ -116,7 +117,7 @@ class Tracker:
                 for fn in dynamic_anchors[mod_name]:
                     self.add_dynamic_usage_recorder(m, mod_name, fn)
         if log_file:
-            self.log_file = open(log_file, 'a')
+            self.log_file = log_file if isinstance(log_file, io.IOBase) else open(log_file, 'a')
             print("--- start tracking ---", file=self.log_file)
 
         def _new_find_and_load(name: str, import_: Any) -> Any:
@@ -172,7 +173,6 @@ class Tracker:
             print("tracked: ", self.tracked, file= self.log_file)
             print("dynamic imports:", self.dynamic_imports, file= self.log_file)
             print("dynamic users:", self.dynamic_users, file= self.log_file)
-            # TODO: avoid closing stdout/stderr
             self.log_file.close()
 
         setattr(getattr(importlib, '_bootstrap'), '_find_and_load', self.old_find_and_load)
@@ -205,17 +205,19 @@ class Tracker:
             # we're already tracking this one
             #  - fully resolved: tracked[] has the full transitive deps
             #  - import cycle: tracked[] deps might not be complete
-            if name in sys.modules:
+
+            start_idx = next((i for i, v in enumerate(self.stack) if v == name), -1)
+            if start_idx == -1:
                 self.cxt.update(self.tracked[name])
             else:
                 # every entry of an import cycle ends up with an identical
                 # set of transitive deps. let's go ahead and consolidate them
                 # so that they all point to the same underlying set() instance
-                start_idx = self.stack.index(name)
                 cycle = self.stack[start_idx:]
 
-                # print("warn: cycle {} -> {}".format(cycle, name),
-                #       file=sys.stderr)
+                if self.log_file:
+                    print("warn: cycle {} -> {}".format(cycle, name),
+                          file=self.log_file)
 
                 # there might be multiple import cycles overlapping in the stack,
                 # fortunately, we're guaranteed that every module within a cycle
@@ -281,10 +283,11 @@ class Tracker:
                     self.add_dynamic_usage_recorder(m, name, fn_name)
 
             return m
-        except Exception as e:
+        except BaseException as e:
             has_err = True
+            if self.log_file:
+                print(f"warn: {e}", file=self.log_file)
             if new_context:
-                print(f"{e}", file=sys.stderr)
                 # defer removal from self.tracked[] if we're within an import cycle
                 # NB: this should happen if there's an uncaught import error, in
                 # affirm code, which is not expected in practice, unless something
