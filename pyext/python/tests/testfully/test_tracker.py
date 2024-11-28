@@ -61,7 +61,7 @@ class TestTracker:
         importlib_import,
         import_module,
     ])
-    def test_import_baz(self, fn) -> None:
+    def test_import_simple_transitive(self, fn) -> None:
         with CleanImportTrackerContext('simple', expect_tracked={
             "simple": set(),
             "simple.baz": {'simple', 'simple.foo', 'simple.foo.qux'},
@@ -75,7 +75,7 @@ class TestTracker:
         importlib_import,
         import_module,
     ])
-    def test_import_bar(self, fn) -> None:
+    def test_import_simple_transitive_2(self, fn) -> None:
         with CleanImportTrackerContext('simple', expect_tracked={
             "simple": set(),
             "simple.bar": {'simple', 'simple.baz', 'simple.foo', 'simple.foo.qux'},
@@ -136,6 +136,18 @@ class TestTracker:
             import repeated.two
             import repeated.three
 
+    def test_repeated_import_from_stmt(self) -> None:
+        with CleanImportTrackerContext('repeated', expect_tracked={
+            "repeated": set(),
+            "repeated.same": {"repeated", "repeated.old"},
+            "repeated.one": {"repeated", "repeated.same", "repeated.old"},
+            "repeated.two": {"repeated", "repeated.same", "repeated.old"},
+            "repeated.three": {"repeated", "repeated.same", "repeated.old"},
+        }):
+            from repeated import one
+            from repeated import two
+            from repeated import three
+
     @pytest.mark.parametrize("fn", [
         builtins_import,
         importlib_import,
@@ -171,13 +183,12 @@ class TestTracker:
         "dynamic.bar",
         "dynamic.baz",
     ])
-    def test_dynamic_with_dynamic_false_order_does_not_matter(self, start) -> None:
-        with CleanImportTrackerContext('dynamic', with_dynamic=False, expect_tracked={
+    def test_dynamic_with_dynamic_true(self, start) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=True, expect_tracked={
             "dynamic": set(),
             "dynamic.indirect": {"dynamic", "dynamic.direct"},
-            start: {"dynamic", "dynamic.indirect", "dynamic.direct"}
+            start: {"dynamic", "dynamic.indirect", "dynamic.direct"},
         }):
-            import_module("dynamic.indirect")
             import_module(start)
 
     @pytest.mark.parametrize("start", [
@@ -185,12 +196,13 @@ class TestTracker:
         "dynamic.bar",
         "dynamic.baz",
     ])
-    def test_dynamic_with_dynamic_true(self, start) -> None:
-        with CleanImportTrackerContext('dynamic', with_dynamic=True, expect_tracked={
+    def test_dynamic_with_dynamic_false_order_does_not_matter(self, start) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=False, expect_tracked={
             "dynamic": set(),
             "dynamic.indirect": {"dynamic", "dynamic.direct"},
-            start: {"dynamic", "dynamic.indirect", "dynamic.direct"},
+            start: {"dynamic", "dynamic.indirect", "dynamic.direct"}
         }):
+            import_module("dynamic.indirect")
             import_module(start)
 
     @pytest.mark.parametrize("start", [
@@ -207,7 +219,6 @@ class TestTracker:
             import_module("dynamic.indirect")
             import_module(start)
 
-
     def test_dynamic_with_dynamic_false_does_not_combine_all(self) -> None:
         with CleanImportTrackerContext('dynamic', with_dynamic=False, expect_tracked={
             "dynamic": set(),
@@ -218,8 +229,9 @@ class TestTracker:
             f"dynamic.qux.foo": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo"},
             f"dynamic.qux.bar": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._bar"},
             f"dynamic.qux.baz": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._baz"},
+            f"dynamic.qux.noop": {"dynamic", "dynamic.qux", "dynamic.by_caller"},
         }):
-            for start in ['foo', 'bar', 'baz']:
+            for start in ['foo', 'bar', 'baz', 'noop']:
                 import_module(f"dynamic.qux.{start}")
 
     def test_dynamic_with_dynamic_true_combine_all(self) -> None:
@@ -232,8 +244,62 @@ class TestTracker:
             f"dynamic.qux.foo": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo", f"dynamic._bar", f"dynamic._baz"},
             f"dynamic.qux.bar": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo", f"dynamic._bar", f"dynamic._baz"},
             f"dynamic.qux.baz": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo", f"dynamic._bar", f"dynamic._baz"},
+            f"dynamic.qux.noop": {"dynamic", "dynamic.qux", "dynamic.by_caller"},
         }):
-            for start in ['foo', 'bar', 'baz']:
+            for start in ['foo', 'bar', 'baz', 'noop']:
                 import_module(f"dynamic.qux.{start}")
 
+
+    def test_dynamic_without_anchor_picks_last(self) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=True, expect_tracked={
+            "dynamic": set(),
+            f"dynamic.anchored": {"dynamic"},
+            f"dynamic.anchored.a": {"dynamic", "dynamic.anchored", "dynamic.anchored.b", "dynamic.anchored.c", "dynamic.direct"},
+            f"dynamic.anchored.b": {"dynamic", "dynamic.anchored", "dynamic.anchored.c"},
+            f"dynamic.anchored.c": {"dynamic", "dynamic.anchored"},
+            f"dynamic.direct": {"dynamic"},
+        }) as c:
+            import_module(f"dynamic.anchored.a")
+            assert c.tracker.dynamic_imports.get(('dynamic.anchored.c', 'bla')) == {'dynamic.direct'}
+            assert c.tracker.dynamic_users.get('dynamic.anchored.a') == {('dynamic.anchored.c', 'bla')}
+
+    def test_dynamic_with_anchor_picks_anchor(self) -> None:
+        with CleanImportTrackerContext(
+                'dynamic',
+                with_dynamic=True,
+                dynamic_anchors={
+                    "dynamic.anchored.b": {"gloop"}
+                },
+                expect_tracked={
+                    "dynamic": set(),
+                    f"dynamic.anchored": {"dynamic"},
+                    f"dynamic.anchored.a": {"dynamic", "dynamic.anchored", "dynamic.anchored.b", "dynamic.anchored.c", "dynamic.direct"},
+                    f"dynamic.anchored.b": {"dynamic", "dynamic.anchored", "dynamic.anchored.c"},
+                    f"dynamic.anchored.c": {"dynamic", "dynamic.anchored"},
+                    f"dynamic.direct": {"dynamic"},
+                }) as c:
+            import_module(f"dynamic.anchored.a")
+            assert c.tracker.dynamic_imports.get(('dynamic.anchored.b', 'gloop')) == {'dynamic.direct'}, c.tracker.dynamic_imports
+            assert c.tracker.dynamic_users.get('dynamic.anchored.a') == {('dynamic.anchored.b', 'gloop')}, c.tracker.dynamic_users
+
+
+    def test_dynamic_with_overlapping_anchors_picks_first(self) -> None:
+        with CleanImportTrackerContext(
+                'dynamic',
+                with_dynamic=True,
+                dynamic_anchors={
+                    "dynamic.anchored.a": {"lolwut"},
+                    "dynamic.anchored.b": {"gloop"}
+                },
+                expect_tracked={
+                    "dynamic": set(),
+                    f"dynamic.anchored": {"dynamic"},
+                    f"dynamic.anchored.a": {"dynamic", "dynamic.anchored", "dynamic.anchored.b", "dynamic.anchored.c", "dynamic.direct"},
+                    f"dynamic.anchored.b": {"dynamic", "dynamic.anchored", "dynamic.anchored.c"},
+                    f"dynamic.anchored.c": {"dynamic", "dynamic.anchored"},
+                    f"dynamic.direct": {"dynamic"},
+                }) as c:
+            import_module(f"dynamic.anchored.a")
+            assert c.tracker.dynamic_imports.get(('dynamic.anchored.a', 'lolwut')) == {'dynamic.direct'}, c.tracker.dynamic_imports
+            assert c.tracker.dynamic_users.get('dynamic.anchored.a') == {('dynamic.anchored.a', 'lolwut')}, c.tracker.dynamic_users
 
