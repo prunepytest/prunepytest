@@ -31,8 +31,9 @@ class CleanImportTrackerContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        details = self.tracker.log_file.getvalue()
         self.tracker.stop_tracking()
+        details = self.tracker.log_file.getvalue()
+        self.tracker.log_file.close()
         self._cleanup()
 
         try:

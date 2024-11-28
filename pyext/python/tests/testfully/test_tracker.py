@@ -85,7 +85,6 @@ class TestTracker:
         }):
             fn('simple.bar')
 
-
     @pytest.mark.parametrize("fn", [
         builtins_import,
         importlib_import,
@@ -97,14 +96,12 @@ class TestTracker:
         }):
             fn('unresolved')
 
-
-
     @pytest.mark.parametrize("start", [
         "cycles.a_to_b",
         "cycles.b_to_c",
         "cycles.c_to_a",
     ])
-    def test_cycle(self, start) -> None:
+    def test_cycle_siblings(self, start) -> None:
         with CleanImportTrackerContext('cycles', expect_tracked={
             "cycles": set(),
             "cycles.a_to_b": {"cycles", "cycles.a_to_b", "cycles.b_to_c", "cycles.c_to_a"},
@@ -112,4 +109,131 @@ class TestTracker:
             "cycles.c_to_a": {"cycles", "cycles.a_to_b", "cycles.b_to_c", "cycles.c_to_a"}
         }):
             import_module(start)
+
+    @pytest.mark.parametrize("start", [
+        "cycles.foo",
+        "cycles.foo.bar",
+        "cycles.foo.bar.baz",
+    ])
+    def test_cycle_nested(self, start) -> None:
+        with CleanImportTrackerContext('cycles', expect_tracked={
+            "cycles": set(),
+            "cycles.foo": {"cycles", "cycles.foo", "cycles.foo.bar", "cycles.foo.bar.baz"},
+            "cycles.foo.bar": {"cycles", "cycles.foo", "cycles.foo.bar", "cycles.foo.bar.baz"},
+            "cycles.foo.bar.baz": {"cycles", "cycles.foo", "cycles.foo.bar", "cycles.foo.bar.baz"}
+        }):
+            import_module(start)
+
+    def test_repeated_import_stmt(self) -> None:
+        with CleanImportTrackerContext('repeated', expect_tracked={
+            "repeated": set(),
+            "repeated.same": {"repeated", "repeated.old"},
+            "repeated.one": {"repeated", "repeated.same", "repeated.old"},
+            "repeated.two": {"repeated", "repeated.same", "repeated.old"},
+            "repeated.three": {"repeated", "repeated.same", "repeated.old"},
+        }):
+            import repeated.one
+            import repeated.two
+            import repeated.three
+
+    @pytest.mark.parametrize("fn", [
+        builtins_import,
+        importlib_import,
+        import_module,
+    ])
+    def test_repeated_fn(self, fn) -> None:
+        with CleanImportTrackerContext('repeated', expect_tracked={
+            "repeated": set(),
+            "repeated.same": {"repeated", "repeated.old"},
+            "repeated.one": {"repeated", "repeated.same", "repeated.old"},
+            "repeated.two": {"repeated", "repeated.same", "repeated.old"},
+            "repeated.three": {"repeated", "repeated.same", "repeated.old"},
+        }):
+            fn('repeated.one')
+            fn('repeated.two')
+            fn('repeated.three')
+
+    @pytest.mark.parametrize("start", [
+        "dynamic.foo",
+        "dynamic.bar",
+        "dynamic.baz",
+    ])
+    def test_dynamic_with_dynamic_false(self, start) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=False, expect_tracked={
+            "dynamic": set(),
+            "dynamic.indirect": {"dynamic", "dynamic.direct"},
+            start: {"dynamic", "dynamic.indirect", "dynamic.direct"}
+        }):
+            import_module(start)
+
+    @pytest.mark.parametrize("start", [
+        "dynamic.foo",
+        "dynamic.bar",
+        "dynamic.baz",
+    ])
+    def test_dynamic_with_dynamic_false_order_does_not_matter(self, start) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=False, expect_tracked={
+            "dynamic": set(),
+            "dynamic.indirect": {"dynamic", "dynamic.direct"},
+            start: {"dynamic", "dynamic.indirect", "dynamic.direct"}
+        }):
+            import_module("dynamic.indirect")
+            import_module(start)
+
+    @pytest.mark.parametrize("start", [
+        "dynamic.foo",
+        "dynamic.bar",
+        "dynamic.baz",
+    ])
+    def test_dynamic_with_dynamic_true(self, start) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=True, expect_tracked={
+            "dynamic": set(),
+            "dynamic.indirect": {"dynamic", "dynamic.direct"},
+            start: {"dynamic", "dynamic.indirect", "dynamic.direct"},
+        }):
+            import_module(start)
+
+    @pytest.mark.parametrize("start", [
+        "dynamic.foo",
+        "dynamic.bar",
+        "dynamic.baz",
+    ])
+    def test_dynamic_with_dynamic_true_order_does_not_matter(self, start) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=True, expect_tracked={
+            "dynamic": set(),
+            "dynamic.indirect": {"dynamic", "dynamic.direct"},
+            start: {"dynamic", "dynamic.indirect", "dynamic.direct"}
+        }):
+            import_module("dynamic.indirect")
+            import_module(start)
+
+
+    def test_dynamic_with_dynamic_false_does_not_combine_all(self) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=False, expect_tracked={
+            "dynamic": set(),
+            f"dynamic._foo": {"dynamic"},
+            f"dynamic._bar": {"dynamic"},
+            f"dynamic._baz": {"dynamic"},
+            f"dynamic.by_caller": {"dynamic"},
+            f"dynamic.qux.foo": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo"},
+            f"dynamic.qux.bar": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._bar"},
+            f"dynamic.qux.baz": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._baz"},
+        }):
+            for start in ['foo', 'bar', 'baz']:
+                import_module(f"dynamic.qux.{start}")
+
+    def test_dynamic_with_dynamic_true_combine_all(self) -> None:
+        with CleanImportTrackerContext('dynamic', with_dynamic=True, expect_tracked={
+            "dynamic": set(),
+            f"dynamic._foo": {"dynamic"},
+            f"dynamic._bar": {"dynamic"},
+            f"dynamic._baz": {"dynamic"},
+            f"dynamic.by_caller": {"dynamic"},
+            f"dynamic.qux.foo": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo", f"dynamic._bar", f"dynamic._baz"},
+            f"dynamic.qux.bar": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo", f"dynamic._bar", f"dynamic._baz"},
+            f"dynamic.qux.baz": {"dynamic", "dynamic.qux", "dynamic.by_caller", f"dynamic._foo", f"dynamic._bar", f"dynamic._baz"},
+        }):
+            for start in ['foo', 'bar', 'baz']:
+                import_module(f"dynamic.qux.{start}")
+
 
