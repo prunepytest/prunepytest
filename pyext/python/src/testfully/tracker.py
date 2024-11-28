@@ -367,8 +367,8 @@ class Tracker:
                 print(f"use: ({module_name}, {fn_name})", file=self.log_file)
             for frame in tb:
                 caller_mod = self.file_to_module.get(frame.filename)
-                # NB: omit tracker/validator
-                if caller_mod and caller_mod not in {'__main__', 'runpy', '', __name__}:
+                # NB: only record dynamic use within tracked namespaces
+                if caller_mod and caller_mod.partition('.')[0] in self.prefixes:
                     if self.log_file:
                         print(f"> use from {caller_mod}", file=self.log_file)
                     self.dynamic_users.setdefault(caller_mod, set()).add((module_name, fn_name))
@@ -397,7 +397,8 @@ class Tracker:
         prev_stack = self.dynamic_stack
         assert prev_stack < n, f"{prev_stack} {n}"
 
-        for i in range(2, n):
+        i = 2
+        while i < n:
             # we've reached the previous dynamic import without finding a new one
             if prev_stack == n-i:
                 break
@@ -411,6 +412,7 @@ class Tracker:
                 # we have to filter out our override to avoid incorrectly treating
                 # normal imports as dynamic imports...
                 if n-i-1 > 0 and tb[n-i-1].filename == __file__:
+                    i += 2
                     continue
                 found = n-i
                 break
@@ -422,6 +424,8 @@ class Tracker:
             if "__import__(" in frame.line:
                 found = n-i+1
                 break
+
+            i += 1
 
         # ignore if it's coming from the validator
         if found == -1 or is_validator_frame(tb[found-1]):
@@ -442,10 +446,34 @@ class Tracker:
         # portion of the stack trace, or for an ignore point
         anchor = None
         last_candidate = None
-        for i, frame in enumerate(dyn_stack):
-            mod = self.file_to_module.get(frame.filename)
-            if not mod:
+
+        # keep track of where in the stack of tracked imports we are
+        # So we can resolve filenames for modules currently being imported
+        stack_off = 0
+        fresh_import = False
+
+        for i, frame in enumerate(tb[:found]):
+            if frame.filename == __file__ and frame.name == '_find_and_load_helper':
+                stack_off += 1
+                fresh_import = True
+            if frame.filename in IGNORED_FRAMES:
                 continue
+
+            mod = self.file_to_module.get(frame.filename)
+            # if the file is not in our map, and we just came out of the import machinery
+            # we've found our mapping!
+            if not mod and fresh_import:
+                mod = self.stack[stack_off]
+                if self.log_file:
+                    print(f'resolving: {frame.filename} {mod}', file=self.log_file)
+                self.file_to_module[frame.filename] = mod
+
+            fresh_import = False
+
+            # early stack walk is only for the purpose of name resolution...
+            if i < start or not mod:
+                continue
+
             if mod in self.dynamic_ignores and frame.name in self.dynamic_ignores[mod]:
                 return -1, None
             if mod in self.dynamic_anchors and (
@@ -468,7 +496,7 @@ class Tracker:
         # mark stack height of dynamic import
         self.dynamic_stack = len(tb)
 
-        # only record unexpected dynamic imports
+        # only record stack for unexpected dynamic imports
         if anchor is None:
             self.dynamic.append(dyn_stack)
         return prev_stack, anchor
