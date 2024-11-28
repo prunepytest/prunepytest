@@ -3,6 +3,7 @@ import importlib
 import io
 import sys
 import traceback
+import types
 from functools import wraps
 
 from typing import Any, Iterable, Mapping, Optional, Set, Tuple
@@ -51,7 +52,8 @@ def _builtins_import_no_cache(name, globals=None, locals=None, fromlist=(), leve
 #   - https://docs.python.org/3/reference/datamodel.html#import-related-attributes-on-module-objects
 #   - https://github.com/python/cpython/blob/v3.13.0/Lib/importlib/_bootstrap.py
 class Tracker:
-    __slots__ = ('stack', 'cxt', 'tracked', 'old_find_and_load', 'old_builtins_import',
+    __slots__ = ('stack', 'cxt', 'tracked',
+                 'old_find_and_load', 'old_handle_fromlist', 'old_builtins_import',
                  'dynamic', 'dynamic_stack', 'dynamic_imports', 'dynamic_users',
                  'dynamic_anchors', 'dynamic_ignores', 'file_to_module',
                  'log_file', 'prefixes', 'patches')
@@ -102,6 +104,11 @@ class Tracker:
         # NB: we MUST use getattr/setattr to access those private members
         bs = getattr(importlib, '_bootstrap')
         self.old_find_and_load = getattr(bs, '_find_and_load')
+        # we also need to hook into _handle_fromlist to catch the case where
+        #   from foo import bar
+        # with foo.bar being a module, as _find_and_load may not be called
+        # on instances of this statement beyond the first one...
+        self.old_handle_fromlist = getattr(bs, '_handle_fromlist')
 
         self.prefixes = prefixes
         self.patches = patches
@@ -156,8 +163,34 @@ class Tracker:
                         dynamic_anchor, set()
                     ).update(self.cxt - dynamic_base)
 
+        def _new_handle_fromlist(module, fromlist, import_, **kwargs):
+            if hasattr(module, '__path__'):
+                base_ns = module.__name__.partition('.')[0]
+                if base_ns in self.prefixes:
+                    for x in fromlist:
+                        if not (isinstance(x, str) and x != '*' and hasattr(module, x)):
+                            continue
+                        # this branch isn't going to reach _find_and_load
+                        # so we must add tracking info manually if relevant
+                        from_name = '{}.{}'.format(module.__name__, x)
+                        from_val = getattr(module, x)
+                        # is this actually a module?
+                        if not isinstance(from_val, types.ModuleType):
+                            continue
+                        canonical = from_val.__name__
+                        if canonical != from_name and canonical.partition('.')[0] not in self.prefixes:
+                            continue
+                        if self.log_file:
+                            print(f"tracked:{' ' * len(self.stack)}{canonical} [fromlist: {from_name}]", file=self.log_file)
+                        self.cxt.add(canonical)
+                        if canonical in self.tracked:
+                            self.cxt.update(self.tracked[canonical])
+
+            return self.old_handle_fromlist(module, fromlist, import_, **kwargs)
+
 
         setattr(bs, '_find_and_load', _new_find_and_load)
+        setattr(bs, '_handle_fromlist', _new_handle_fromlist)
 
         # we also override builtins __import__ to point to importlib's version
         # why? because the builtins hits the module cache too early, leading
@@ -173,9 +206,12 @@ class Tracker:
             print("tracked: ", self.tracked, file= self.log_file)
             print("dynamic imports:", self.dynamic_imports, file= self.log_file)
             print("dynamic users:", self.dynamic_users, file= self.log_file)
-            self.log_file.close()
+            if not isinstance(self.log_file, io.StringIO):
+                self.log_file.close()
 
-        setattr(getattr(importlib, '_bootstrap'), '_find_and_load', self.old_find_and_load)
+        bs = getattr(importlib, '_bootstrap')
+        setattr(bs, '_handle_fromlist', self.old_handle_fromlist)
+        setattr(bs, '_find_and_load', self.old_find_and_load)
         builtins.__import__ = self.old_builtins_import
 
     def enter_context(self, cxt):
@@ -375,7 +411,7 @@ class Tracker:
                 # we have to filter out our override to avoid incorrectly treating
                 # normal imports as dynamic imports...
                 if n-i-1 > 0 and tb[n-i-1].filename == __file__:
-                    break
+                    continue
                 found = n-i
                 break
 
