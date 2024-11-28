@@ -89,6 +89,7 @@ jobs:
         with:
           arch: ${{ matrix.platform.target }}
           distro: ubuntu22.04
+          githubToken: ${{ github.token }}
           install: |
             set -e
             apt-get update
@@ -97,6 +98,7 @@ jobs:
             uv python install ${{ matrix.python-version }}
           run: |
             set -e
+            cd pyext
             uv venv .venv --python ${{ matrix.python-version }} --seed
             pkg=.venv/lib/python${{ matrix.python-version }}/site-packages
             .venv/bin/python -m pip install --find-links dist --no-index --force-reinstall testfully
