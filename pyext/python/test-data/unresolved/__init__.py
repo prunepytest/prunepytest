@@ -1,4 +1,3 @@
-
 try:
     import notfound0
 except ImportError:

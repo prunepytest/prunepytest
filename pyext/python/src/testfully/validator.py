@@ -51,26 +51,30 @@ from .util import print_with_timestamp, import_file, load_import_graph, is_test_
 
 def import_with_capture(fq: str, c_out: bool, c_err: bool):
     with io.StringIO() as f:
-        with contextlib.redirect_stdout(f) if c_out else contextlib.nullcontext(), \
-                contextlib.redirect_stderr(f) if c_err else contextlib.nullcontext():
+        with contextlib.redirect_stdout(
+            f
+        ) if c_out else contextlib.nullcontext(), contextlib.redirect_stderr(
+            f
+        ) if c_err else contextlib.nullcontext():
             try:
                 importlib.__import__(fq, fromlist=())
             except:
                 if c_out or c_err:
-                    print_with_timestamp(f'--- captured output for: {fq}')
+                    print_with_timestamp(f"--- captured output for: {fq}")
                     sys.stderr.write(f.getvalue())
                 raise
 
 
-def recursive_import_tests(path: str, import_prefix: str, hook: Any,
-                           errors: Dict[str, BaseException]) -> Set[str]:
+def recursive_import_tests(
+    path: str, import_prefix: str, hook: Any, errors: Dict[str, BaseException]
+) -> Set[str]:
     # catch stdout/stderr to prevent noise from packages being imported
-    capture_out = getattr(hook, 'CAPTURE_STDOUT', True)
-    capture_err = getattr(hook, 'CAPTURE_STDERR', True)
+    capture_out = getattr(hook, "CAPTURE_STDOUT", True)
+    capture_err = getattr(hook, "CAPTURE_STDERR", True)
 
     imported = set()
 
-    init_py = os.path.join(path, '__init__.py')
+    init_py = os.path.join(path, "__init__.py")
     if os.path.exists(init_py):
         try:
             import_with_capture(import_prefix, capture_out, capture_err)
@@ -81,9 +85,11 @@ def recursive_import_tests(path: str, import_prefix: str, hook: Any,
     with os.scandir(path) as it:
         for e in it:
             if e.is_dir():
-                imported |= recursive_import_tests(e.path, import_prefix + '.' + e.name, hook, errors)
+                imported |= recursive_import_tests(
+                    e.path, import_prefix + "." + e.name, hook, errors
+                )
             elif e.is_file() and is_test_file(e.name):
-                if hasattr(hook, 'before_file'):
+                if hasattr(hook, "before_file"):
                     hook.before_file(e, import_prefix)
                 fq = import_prefix + "." + e.name[:-3]
                 try:
@@ -92,13 +98,18 @@ def recursive_import_tests(path: str, import_prefix: str, hook: Any,
                 except BaseException as ex:
                     # NB: this should not happen, report so it can be fixed and proceed
                     errors[e.path] = ex
-                if hasattr(hook, 'after_file'):
+                if hasattr(hook, "after_file"):
                     hook.after_file(e, import_prefix)
 
     return imported
 
 
-def validate(py_tracked: Dict[str, Set[str]], rust_graph, filter_fn: Callable[[str], bool], package = None) -> int:
+def validate(
+    py_tracked: Dict[str, Set[str]],
+    rust_graph,
+    filter_fn: Callable[[str], bool],
+    package=None,
+) -> int:
     diff_count = 0
     for module, pydeps in py_tracked.items():
         if not filter_fn(module):
@@ -113,25 +124,28 @@ def validate(py_tracked: Dict[str, Set[str]], rust_graph, filter_fn: Callable[[s
         rust_missing = pydeps - rdeps
         if rust_missing:
             diff_count += 1
-            print(f'{module} rust {len(rdeps)} / py {len(pydeps)}: rust missing {len(rust_missing)} {rust_missing}')
+            print(
+                f"{module} rust {len(rdeps)} / py {len(pydeps)}: rust missing {len(rust_missing)} {rust_missing}"
+            )
     return diff_count
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     hook = import_file("testfully._hook", sys.argv[1])
 
     from . import tracker
 
     t = tracker.Tracker()
-    t.start_tracking(hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
-                     patches=getattr(hook, 'IMPORT_PATCHES', None),
-                     record_dynamic=True,
-                     dynamic_anchors=getattr(hook, 'DYNAMIC_AGGREGATE', None),
-                     dynamic_ignores=getattr(hook, 'DYNAMIC_IGNORE', None),
-                     log_file=getattr(hook, 'TRACKER_LOG', None),
-                     )
+    t.start_tracking(
+        hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
+        patches=getattr(hook, "IMPORT_PATCHES", None),
+        record_dynamic=True,
+        dynamic_anchors=getattr(hook, "DYNAMIC_AGGREGATE", None),
+        dynamic_ignores=getattr(hook, "DYNAMIC_IGNORE", None),
+        log_file=getattr(hook, "TRACKER_LOG", None),
+    )
 
-    if hasattr(hook, 'setup'):
+    if hasattr(hook, "setup"):
         hook.setup()
 
     g = load_import_graph(hook, sys.argv[2] if len(sys.argv) > 2 else None)
@@ -141,7 +155,7 @@ if __name__ == '__main__':
     error_count = 0
 
     # TODO: user-defined order (toposort of package dep graph...)
-    print_with_timestamp(f"--- tracking python imports")
+    print_with_timestamp("--- tracking python imports")
     for base, sub in sorted(hook.test_folders().items()):
         assert sub in hook.LOCAL_NAMESPACES, f"{sub} not in {hook.LOCAL_NAMESPACES}"
 
@@ -154,7 +168,7 @@ if __name__ == '__main__':
         sys.path.insert(0, os.path.abspath(base))
         old_k = set(sys.modules.keys())
 
-        if hasattr(hook, 'before_folder'):
+        if hasattr(hook, "before_folder"):
             hook.before_folder(base, sub)
 
         errors = {}
@@ -170,13 +184,13 @@ if __name__ == '__main__':
             print(f"{len(errors)} exceptions encountered!")
 
             for filepath, ex in errors.items():
-                print_with_timestamp(f'--- {filepath}')
-                print(f'{type(ex)} {ex}')
+                print_with_timestamp(f"--- {filepath}")
+                print(f"{type(ex)} {ex}")
                 tb = traceback.extract_tb(ex.__traceback__)
                 traceback.print_list(
                     tb
-                    if tb[-1].filename == tracker.__file__ else
-                    tracker.omit_tracker_frames(tb)
+                    if tb[-1].filename == tracker.__file__
+                    else tracker.omit_tracker_frames(tb)
                 )
 
         with_dynamic = {}
@@ -196,34 +210,32 @@ if __name__ == '__main__':
         # files, so as long as we validate that tests have matching imports between
         # python and Rust, we're good to go.
         def is_local_test_module(module: str) -> bool:
-            last = module.rpartition('.')[2]
-            return module.startswith(sub) and (last.startswith('test_') or last.endswith('_test'))
+            last = module.rpartition(".")[2]
+            return module.startswith(sub) and (
+                last.startswith("test_") or last.endswith("_test")
+            )
 
         files_with_missing_imports += validate(
-            with_dynamic,
-            g,
-            package=base,
-            filter_fn=is_local_test_module
+            with_dynamic, g, package=base, filter_fn=is_local_test_module
         )
 
         # cleanup to avoid contaminating subsequent iterations
         sys.path = sys.path[1:]
         new_k = sys.modules.keys() - old_k
         for m in new_k:
-            if m.partition('.')[0] == sub:
+            if m.partition(".")[0] == sub:
                 del t.tracked[m]
                 if m in t.dynamic_users:
                     del t.dynamic_users[m]
                 del sys.modules[m]
 
-        if hasattr(hook, 'after_folder'):
+        if hasattr(hook, "after_folder"):
             hook.after_folder(base, sub)
-
 
     t.stop_tracking()
 
-    if t.dynamic and getattr(hook, 'RECORD_DYNAMIC', False):
-        print_with_timestamp(f"--- locations of dynamic imports")
+    if t.dynamic and getattr(hook, "RECORD_DYNAMIC", False):
+        print_with_timestamp("--- locations of dynamic imports")
         dedup_stack = set()
         for dyn_stack in t.dynamic:
             as_tuple = tuple((f.filename, f.lineno) for f in dyn_stack)
@@ -234,22 +246,22 @@ if __name__ == '__main__':
             traceback.print_list(dyn_stack, file=sys.stdout)
 
     # validate global namespace once all packages have been processed
-    print_with_timestamp(f"--- comparing code import graphs")
+    print_with_timestamp("--- comparing code import graphs")
     files_with_missing_imports += validate(
         t.tracked,
         g,
-        filter_fn=lambda module: module.partition('.')[0] in hook.GLOBAL_NAMESPACES
+        filter_fn=lambda module: module.partition(".")[0] in hook.GLOBAL_NAMESPACES,
     )
 
-    print_with_timestamp(f"--- validation result")
+    print_with_timestamp("--- validation result")
     if error_count + files_with_missing_imports == 0:
-        print(f"The rust module graph can be trusted")
+        print("The rust module graph can be trusted")
         sys.exit(0)
     else:
         if files_with_missing_imports:
-            print(f"The rust module graph is missing some imports")
+            print("The rust module graph is missing some imports")
             print("You may need to make some dynamic imports explicit")
         if error_count:
-            print(f"Errors prevented validation of the rust module graph")
+            print("Errors prevented validation of the rust module graph")
             print("Fix them and try again...")
         sys.exit(1)

@@ -1,6 +1,6 @@
-
 def import_by_name(name):
-    __import__(f'dynamic._{name}')
+    __import__(f"dynamic._{name}")
+
 
 class Importer:
     def by_name(self, name):

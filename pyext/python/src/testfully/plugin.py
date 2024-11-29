@@ -1,6 +1,7 @@
 """
 pytest plugin
 """
+
 from warnings import WarningMessage
 
 import pytest
@@ -19,36 +20,28 @@ def pytest_addoption(parser, pluginmanager):
         "--testfully",
         action="store_true",
         dest="testfully",
-        help=(
-            "Select tests affected by changes (based on import graph)."
-        ),
+        help=("Select tests affected by changes (based on import graph)."),
     )
 
     group.addoption(
         "--testfully-noselect",
         action="store_true",
         dest="testfully_noselect",
-        help=(
-            "Keep default test selection, instead of pruning irrelevant tests"
-        ),
+        help=("Keep default test selection, instead of pruning irrelevant tests"),
     )
 
     group.addoption(
         "--testfully-novalidate",
         action="store_true",
         dest="testfully_novalidate",
-        help=(
-            "Skip validation of dynamic imports"
-        ),
+        help=("Skip validation of dynamic imports"),
     )
 
     group.addoption(
         "--testfully-warnonly",
         action="store_true",
         dest="testfully_warnonly",
-        help=(
-            "Only warn instead of failing upon unexpected imports"
-        ),
+        help=("Only warn instead of failing upon unexpected imports"),
     )
 
     group.addoption(
@@ -57,9 +50,7 @@ def pytest_addoption(parser, pluginmanager):
         type=str,
         dest="testfully_hook",
         default="testfully-hook.py",
-        help=(
-            "File in which the import graph is stored"
-        ),
+        help=("File in which the import graph is stored"),
     )
 
     group.addoption(
@@ -67,9 +58,7 @@ def pytest_addoption(parser, pluginmanager):
         action="store",
         type=str,
         dest="testfully_graph_root",
-        help=(
-            "File in which the import graph is stored"
-        ),
+        help=("File in which the import graph is stored"),
     )
 
     group.addoption(
@@ -78,9 +67,7 @@ def pytest_addoption(parser, pluginmanager):
         type=str,
         dest="testfully_graph",
         default=".testfully.bin",
-        help=(
-            "File in which the import graph is stored"
-        ),
+        help=("File in which the import graph is stored"),
     )
 
 
@@ -91,8 +78,9 @@ def pytest_configure(config):
 
     # old versions of pluggy do not have force_exception...
     import pluggy
-    if pluggy.__version__ < '1.2':
-        raise ValueError('testfully requires pluggy>=1.2')
+
+    if pluggy.__version__ < "1.2":
+        raise ValueError("testfully requires pluggy>=1.2")
 
     if opt.testfully_hook:
         hook = import_file("testfully._hook", opt.testfully_hook)
@@ -106,12 +94,16 @@ def pytest_configure(config):
         # the import graph is assumed to be full of repo-relative path
         # so we need to adjust in case of running tests in a subdir
         try:
-            repo_root = subprocess.check_output(
-                ["git", "rev-parse", "--show-toplevel"],
-                stdin=subprocess.DEVNULL,
-            ).decode("utf-8").rstrip()
+            repo_root = (
+                subprocess.check_output(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    stdin=subprocess.DEVNULL,
+                )
+                .decode("utf-8")
+                .rstrip()
+            )
             rel_root = config.rootpath.relative_to(repo_root)
-        except:
+        except subprocess.CalledProcessError:
             # if we're not in a git repo, assume
             rel_root = None
 
@@ -141,15 +133,14 @@ class TestfullyValidate:
             hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
             patches=None,
             record_dynamic=True,
-            dynamic_anchors=getattr(hook, 'DYNAMIC_AGGREGATE', None),
-            dynamic_ignores=getattr(hook, 'DYNAMIC_IGNORE', None),
+            dynamic_anchors=getattr(hook, "DYNAMIC_AGGREGATE", None),
+            dynamic_ignores=getattr(hook, "DYNAMIC_IGNORE", None),
             # TODO: override from pytest config?
-            log_file=getattr(hook, 'TRACKER_LOG', None),
+            log_file=getattr(hook, "TRACKER_LOG", None),
         )
         self.files_to_validate = set()
         self.file_to_import = {}
         self.unexpected = (0, 0)
-
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
     def pytest_runtestloop(self, session):
@@ -159,7 +150,7 @@ class TestfullyValidate:
         for f in self.files_to_validate:
             # NB: fix test file location to be consistent with graph
             graph_path = str(self.rel_root / f) if self.rel_root else f
-            import_path = f[:-3].replace('/', '.')
+            import_path = f[:-3].replace("/", ".")
 
             expected = self.graph.file_depends_on(graph_path)
             actual = self.tracker.with_dynamic(import_path)
@@ -179,7 +170,7 @@ class TestfullyValidate:
                         ),
                         when="runtest",
                         nodeid=f,
-                        location=(f, 0, "<module>")
+                        location=(f, 0, "<module>"),
                     )
                 )
                 u = (u[0] + 1, u[1] + len(unexpected))
@@ -196,29 +187,29 @@ class TestfullyValidate:
 
         u = self.unexpected
         if u[0] > 0 and not session.config.option.testfully_warnonly:
-            outcome.force_exception(pytest.exit.Exception(
-                f"{u[1]} unexpected import{'s' if u[1] > 1 else ''} "
-                f"in {u[0]} file{'s' if u[0] > 1 else ''}",
-                pytest.ExitCode.TESTS_FAILED
-            ))
+            outcome.force_exception(
+                pytest.exit.Exception(
+                    f"{u[1]} unexpected import{'s' if u[1] > 1 else ''} "
+                    f"in {u[0]} file{'s' if u[0] > 1 else ''}",
+                    pytest.ExitCode.TESTS_FAILED,
+                )
+            )
 
         return outcome
-
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
     def pytest_runtest_logstart(self, nodeid, location):
         f = location[0]
         self.files_to_validate.add(f)
-        import_path = f[:-3].replace('/', '.')
+        import_path = f[:-3].replace("/", ".")
         self.tracker.enter_context(import_path)
 
         return (yield)
 
-
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
     def pytest_runtest_logfinish(self, nodeid, location):
         f = location[0]
-        import_path = f[:-3].replace('/', '.')
+        import_path = f[:-3].replace("/", ".")
         self.tracker.exit_context(import_path)
 
         return (yield)
@@ -228,7 +219,6 @@ class TestfullySelect:
     def __init__(self, hook, graph):
         self.hook = hook
         self.graph = graph
-
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
     def pytest_collection_modifyitems(self, session, config, items):

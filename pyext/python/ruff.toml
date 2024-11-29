@@ -1,0 +1,10 @@
+target-version = "py37"
+line-length = 88
+indent-width = 4
+
+[format]
+indent-style = "space"
+
+[lint.pycodestyle]
+# E501 reports lines that exceed the length of 100.
+max-line-length = 120

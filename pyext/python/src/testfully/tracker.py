@@ -17,6 +17,8 @@ IGNORED_FRAMES = {
     "<frozen importlib._bootstrap>",
     "<frozen importlib._bootstrap_external>",
 }
+
+
 def omit_tracker_frames(tb: traceback.StackSummary) -> Iterable[traceback.FrameSummary]:
     """
     Remove stack frames associated with the import machinery or our hooking into it.
@@ -26,11 +28,13 @@ def omit_tracker_frames(tb: traceback.StackSummary) -> Iterable[traceback.FrameS
 
 
 def is_validator_frame(frame: traceback.FrameSummary):
-    return frame.name == 'import_with_capture' and frame.filename.endswith('validator.py')
+    return frame.name == "import_with_capture" and frame.filename.endswith(
+        "validator.py"
+    )
 
 
 def _apply_patch(o: object, attr_name: str, attr_val: Any) -> None:
-    p = attr_name.split('.')
+    p = attr_name.split(".")
     for n in p[:-1]:
         o = getattr(o, n)
     setattr(o, p[-1], attr_val.__call__(getattr(o, p[-1], None)))
@@ -52,11 +56,24 @@ def _builtins_import_no_cache(name, globals=None, locals=None, fromlist=(), leve
 #   - https://docs.python.org/3/reference/datamodel.html#import-related-attributes-on-module-objects
 #   - https://github.com/python/cpython/blob/v3.13.0/Lib/importlib/_bootstrap.py
 class Tracker:
-    __slots__ = ('stack', 'cxt', 'tracked',
-                 'old_find_and_load', 'old_handle_fromlist', 'old_builtins_import',
-                 'dynamic', 'dynamic_stack', 'dynamic_imports', 'dynamic_users',
-                 'dynamic_anchors', 'dynamic_ignores', 'file_to_module',
-                 'log_file', 'prefixes', 'patches')
+    __slots__ = (
+        "stack",
+        "cxt",
+        "tracked",
+        "old_find_and_load",
+        "old_handle_fromlist",
+        "old_builtins_import",
+        "dynamic",
+        "dynamic_stack",
+        "dynamic_imports",
+        "dynamic_users",
+        "dynamic_anchors",
+        "dynamic_ignores",
+        "file_to_module",
+        "log_file",
+        "prefixes",
+        "patches",
+    )
 
     def __init__(self):
         self.stack = [""]
@@ -82,13 +99,15 @@ class Tracker:
         self.prefixes = set()
         self.patches = None
 
-    def start_tracking(self, prefixes: Set[str],
-                       patches: Optional[Mapping[str, Any]] = None,
-                       record_dynamic: bool = False,
-                       dynamic_anchors: Optional[Mapping[str, Set[str]]] = None,
-                       dynamic_ignores: Optional[Mapping[str, Set[str]]] = None,
-                       log_file: Optional[str] = None,
-                       ) -> None:
+    def start_tracking(
+        self,
+        prefixes: Set[str],
+        patches: Optional[Mapping[str, Any]] = None,
+        record_dynamic: bool = False,
+        dynamic_anchors: Optional[Mapping[str, Set[str]]] = None,
+        dynamic_ignores: Optional[Mapping[str, Set[str]]] = None,
+        log_file: Optional[str] = None,
+    ) -> None:
         # The usual "public" hook is builtins.__import__
         # Hooking in there is not great for our purpose as it only catches
         # explicit imports, and the internal logic which implicitly loads
@@ -102,13 +121,13 @@ class Tracker:
         # resolution of relative imports, and crucially it is called even
         # for implicit loading
         # NB: we MUST use getattr/setattr to access those private members
-        bs = getattr(importlib, '_bootstrap')
-        self.old_find_and_load = getattr(bs, '_find_and_load')
+        bs = getattr(importlib, "_bootstrap")
+        self.old_find_and_load = getattr(bs, "_find_and_load")
         # we also need to hook into _handle_fromlist to catch the case where
         #   from foo import bar
         # with foo.bar being a module, as _find_and_load may not be called
         # on instances of this statement beyond the first one...
-        self.old_handle_fromlist = getattr(bs, '_handle_fromlist')
+        self.old_handle_fromlist = getattr(bs, "_handle_fromlist")
 
         self.prefixes = prefixes
         self.patches = patches
@@ -118,24 +137,28 @@ class Tracker:
         # resolve anchors to already-loaded modules
         # the rest will be resolved as needed when relevant modules are loaded
         for mod_name, m in sys.modules.items():
-            if hasattr(m, '__file__'):
+            if hasattr(m, "__file__"):
                 self.file_to_module[m.__file__] = mod_name
             if dynamic_anchors and mod_name in dynamic_anchors:
                 for fn in dynamic_anchors[mod_name]:
                     self.add_dynamic_usage_recorder(m, mod_name, fn)
         if log_file:
-            self.log_file = log_file if isinstance(log_file, io.IOBase) else open(log_file, 'a')
+            self.log_file = (
+                log_file if isinstance(log_file, io.IOBase) else open(log_file, "a")
+            )
             print("--- start tracking ---", file=self.log_file)
 
         def _new_find_and_load(name: str, import_: Any) -> Any:
             # only track relevant namespace
-            base_ns = name.partition('.')[0]
+            base_ns = name.partition(".")[0]
             if base_ns not in self.prefixes:
                 return self.old_find_and_load(name, import_)
 
-            dynamic_idx, dynamic_anchor, is_ignored = self.record_dynamic_imports(
-                traceback.extract_stack()
-            ) if record_dynamic else (-1, None, False)
+            dynamic_idx, dynamic_anchor, is_ignored = (
+                self.record_dynamic_imports(traceback.extract_stack())
+                if record_dynamic
+                else (-1, None, False)
+            )
 
             if dynamic_idx == -1:
                 return self._find_and_load_helper(name, import_, is_ignored)
@@ -155,34 +178,42 @@ class Tracker:
                 return self._find_and_load_helper(name, import_, is_ignored)
             finally:
                 if name in self.dynamic_users and not is_ignored:
-                    self.dynamic_users.setdefault(self.stack[-1], set()).update(self.dynamic_users[name])
+                    self.dynamic_users.setdefault(self.stack[-1], set()).update(
+                        self.dynamic_users[name]
+                    )
 
                 # record dynamic imports
                 self.dynamic_stack = dynamic_idx
                 if dynamic_base:
-                    self.dynamic_imports.setdefault(
-                        dynamic_anchor, set()
-                    ).update(self.cxt - dynamic_base)
+                    self.dynamic_imports.setdefault(dynamic_anchor, set()).update(
+                        self.cxt - dynamic_base
+                    )
 
         def _new_handle_fromlist(module, fromlist, import_, **kwargs):
-            if hasattr(module, '__path__'):
-                base_ns = module.__name__.partition('.')[0]
+            if hasattr(module, "__path__"):
+                base_ns = module.__name__.partition(".")[0]
                 if base_ns in self.prefixes:
                     for x in fromlist:
-                        if not (isinstance(x, str) and x != '*' and hasattr(module, x)):
+                        if not (isinstance(x, str) and x != "*" and hasattr(module, x)):
                             continue
                         # this branch isn't going to reach _find_and_load
                         # so we must add tracking info manually if relevant
-                        from_name = '{}.{}'.format(module.__name__, x)
+                        from_name = "{}.{}".format(module.__name__, x)
                         from_val = getattr(module, x)
                         # is this actually a module?
                         if not isinstance(from_val, types.ModuleType):
                             continue
                         canonical = from_val.__name__
-                        if canonical != from_name and canonical.partition('.')[0] not in self.prefixes:
+                        if (
+                            canonical != from_name
+                            and canonical.partition(".")[0] not in self.prefixes
+                        ):
                             continue
                         if self.log_file:
-                            print(f"tracked:{' ' * len(self.stack)}{canonical} [fromlist: {from_name}]", file=self.log_file)
+                            print(
+                                f"tracked:{' ' * len(self.stack)}{canonical} [fromlist: {from_name}]",
+                                file=self.log_file,
+                            )
                         # FIXME: handle dynamic_anchors / dynamic_ignores ?
                         # it's technically possible, that someone would use __import__ with the `fromlist`
                         # argument, and want those calls to be caught in dynamic aggregation/ignores
@@ -194,9 +225,8 @@ class Tracker:
 
             return self.old_handle_fromlist(module, fromlist, import_, **kwargs)
 
-
-        setattr(bs, '_find_and_load', _new_find_and_load)
-        setattr(bs, '_handle_fromlist', _new_handle_fromlist)
+        setattr(bs, "_find_and_load", _new_find_and_load)
+        setattr(bs, "_handle_fromlist", _new_handle_fromlist)
 
         # we also override builtins __import__ to point to importlib's version
         # why? because the builtins hits the module cache too early, leading
@@ -205,18 +235,17 @@ class Tracker:
         self.old_builtins_import = builtins.__import__
         builtins.__import__ = _builtins_import_no_cache
 
-
     def stop_tracking(self) -> None:
         if self.log_file:
-            print("--- stop tracking ", file= self.log_file)
-            print("tracked: ", self.tracked, file= self.log_file)
-            print("dynamic imports:", self.dynamic_imports, file= self.log_file)
-            print("dynamic users:", self.dynamic_users, file= self.log_file)
+            print("--- stop tracking ", file=self.log_file)
+            print("tracked: ", self.tracked, file=self.log_file)
+            print("dynamic imports:", self.dynamic_imports, file=self.log_file)
+            print("dynamic users:", self.dynamic_users, file=self.log_file)
             self.log_file.close()
 
-        bs = getattr(importlib, '_bootstrap')
-        setattr(bs, '_handle_fromlist', self.old_handle_fromlist)
-        setattr(bs, '_find_and_load', self.old_find_and_load)
+        bs = getattr(importlib, "_bootstrap")
+        setattr(bs, "_handle_fromlist", self.old_handle_fromlist)
+        setattr(bs, "_find_and_load", self.old_find_and_load)
         builtins.__import__ = self.old_builtins_import
 
     def enter_context(self, cxt):
@@ -242,14 +271,19 @@ class Tracker:
         }
         return self.tracked[m] | dyn
 
-
     def _find_and_load_helper(self, name: str, import_: Any, is_ignored: bool) -> Any:
         new_context = False
         if not is_ignored:
             self.cxt.add(name)
             if self.log_file:
-                flag = '*' if name in self.tracked else ('+' if name in sys.modules else ' ')
-                print(f"tracked:{' ' * len(self.stack)}{name} {flag}", file=self.log_file)
+                flag = (
+                    "*"
+                    if name in self.tracked
+                    else ("+" if name in sys.modules else " ")
+                )
+                print(
+                    f"tracked:{' ' * len(self.stack)}{name} {flag}", file=self.log_file
+                )
         if name not in self.tracked:
             # not tracked yet: push a new context into the stack
             # NB: the set is a reference, not a value, so changes to cxt
@@ -274,8 +308,9 @@ class Tracker:
                 cycle = self.stack[start_idx:]
 
                 if self.log_file:
-                    print("warn: cycle {} -> {}".format(cycle, name),
-                          file=self.log_file)
+                    print(
+                        "warn: cycle {} -> {}".format(cycle, name), file=self.log_file
+                    )
 
                 # there might be multiple import cycles overlapping in the stack,
                 # fortunately, we're guaranteed that every module within a cycle
@@ -303,7 +338,7 @@ class Tracker:
 
             # maintain a mapping of file path to module name
             # this is later used to map filepath from stack frame to module
-            if hasattr(m, '__file__'):
+            if hasattr(m, "__file__"):
                 self.file_to_module[m.__file__] = name
 
             # apply any necessary patches immediately after loading module
@@ -318,12 +353,14 @@ class Tracker:
             # set of deps is either already fully resolved, including its
             # own parent, or partially resolved in a cycle that is being
             # consolidated...
-            parent = name.rpartition('.')[0]
+            parent = name.rpartition(".")[0]
             if parent and parent not in self.cxt and parent in self.tracked:
                 self.cxt.add(parent)
                 self.cxt.update(self.tracked[parent])
                 if parent in self.dynamic_users:
-                    self.dynamic_users.setdefault(name, set()).update(self.dynamic_users[parent])
+                    self.dynamic_users.setdefault(name, set()).update(
+                        self.dynamic_users[parent]
+                    )
 
             if name in self.dynamic_anchors:
                 # wrap the methods to record dynamic usage
@@ -360,8 +397,9 @@ class Tracker:
                     # TODO: track "optional" deps separately?
                     self.cxt.discard(name)
 
-
-    def add_dynamic_usage_recorder(self, module: str, module_name: str, fn_name: str) -> None:
+    def add_dynamic_usage_recorder(
+        self, module: str, module_name: str, fn_name: str
+    ) -> None:
         """
         Wraps a given function from a given module to record subsequent usages from
         other modules.
@@ -373,6 +411,7 @@ class Tracker:
         At a later point the combined imports from this function can be integrated
         into the dependencies for all caller modules
         """
+
         def wrapped_fn(*args, **kwargs):
             tb = traceback.extract_stack()
             if self.log_file:
@@ -380,17 +419,19 @@ class Tracker:
             for frame in tb:
                 caller_mod = self.file_to_module.get(frame.filename)
                 # NB: only record dynamic use within tracked namespaces
-                if caller_mod and caller_mod.partition('.')[0] in self.prefixes:
+                if caller_mod and caller_mod.partition(".")[0] in self.prefixes:
                     if self.log_file:
                         print(f"> use from {caller_mod}", file=self.log_file)
-                    self.dynamic_users.setdefault(caller_mod, set()).add((module_name, fn_name.rpartition('.')[2]))
+                    self.dynamic_users.setdefault(caller_mod, set()).add(
+                        (module_name, fn_name.rpartition(".")[2])
+                    )
             return fn(*args, **kwargs)
 
         if self.log_file:
             print(f"patching {module_name} {fn_name}", file=self.log_file)
-        if '.' in fn_name:
+        if "." in fn_name:
             # TODO: all arbitrary field chain?
-            obj, method = fn_name.split('.', maxsplit=1)
+            obj, method = fn_name.split(".", maxsplit=1)
             if hasattr(module, obj):
                 o = getattr(module, obj)
                 if hasattr(o, method):
@@ -400,8 +441,9 @@ class Tracker:
             fn = getattr(module, fn_name)
             setattr(module, fn_name, wraps(fn)(wrapped_fn))
 
-
-    def record_dynamic_imports(self, tb: traceback.StackSummary) -> Tuple[int, Optional[str], bool]:
+    def record_dynamic_imports(
+        self, tb: traceback.StackSummary
+    ) -> Tuple[int, Optional[str], bool]:
         # walk down the stack until we either find a recognizable dynamic import,
         # our import hook, or an import from the validator
         n = len(tb)
@@ -414,21 +456,21 @@ class Tracker:
         i = 2
         while i < n:
             # we've reached the previous dynamic import without finding a new one
-            if prev_stack == n-i:
+            if prev_stack == n - i:
                 break
-            frame = tb[n-i]
+            frame = tb[n - i]
             # TODO: check filename as well
             if frame.name in {"import_module", "load_module"}:
-                found = n-i
+                found = n - i
                 break
             if frame.name == "__import__":
                 # NB: because we override builtins.import to avoid early cache hits,
                 # we have to filter out our override to avoid incorrectly treating
                 # normal imports as dynamic imports...
-                if n-i-1 > 0 and tb[n-i-1].filename == __file__:
+                if n - i - 1 > 0 and tb[n - i - 1].filename == __file__:
                     i += 2
                     continue
-                found = n-i
+                found = n - i
                 break
 
             # NB: builtins.__import__ and importlib.__import__ lead to different stacks
@@ -436,20 +478,26 @@ class Tracker:
             # import that uses the builtin requires looking at the actual code, which is
             # less reliable since the code is not always available...
             if "__import__(" in frame.line:
-                found = n-i+1
+                found = n - i + 1
                 break
 
             i += 1
 
         # ignore if it's coming from the validator
-        if found == -1 or is_validator_frame(tb[found-1]):
+        if found == -1 or is_validator_frame(tb[found - 1]):
             return -1, None, False
 
         # record relevant slice of backtrace, stripping out anything pre-validator
-        start = prev_stack + 1 + max(
-            (i if is_validator_frame(frame) else -1
-             for i, frame in enumerate(tb[prev_stack:found])),
-            default=-1
+        start = (
+            prev_stack
+            + 1
+            + max(
+                (
+                    i if is_validator_frame(frame) else -1
+                    for i, frame in enumerate(tb[prev_stack:found])
+                ),
+                default=-1,
+            )
         )
         dyn_stack = list(omit_tracker_frames(tb[start:found]))
 
@@ -468,7 +516,7 @@ class Tracker:
         fresh_import = False
 
         for i, frame in enumerate(tb[:found]):
-            if frame.filename == __file__ and frame.name == '_find_and_load_helper':
+            if frame.filename == __file__ and frame.name == "_find_and_load_helper":
                 stack_off += 1
                 fresh_import = True
             if frame.filename in IGNORED_FRAMES:
@@ -480,7 +528,7 @@ class Tracker:
             if not mod and fresh_import:
                 mod = self.stack[stack_off]
                 if self.log_file:
-                    print(f'resolving: {frame.filename} {mod}', file=self.log_file)
+                    print(f"resolving: {frame.filename} {mod}", file=self.log_file)
                 self.file_to_module[frame.filename] = mod
 
             fresh_import = False
@@ -494,12 +542,15 @@ class Tracker:
                 is_ignored = True
                 break
             if mod in self.dynamic_anchors and (
-                    frame.name in self.dynamic_anchors[mod]
-                    or any(a.rpartition('.')[2] == frame.name for a in self.dynamic_anchors[mod])
+                frame.name in self.dynamic_anchors[mod]
+                or any(
+                    a.rpartition(".")[2] == frame.name
+                    for a in self.dynamic_anchors[mod]
+                )
             ):
                 anchor = (mod, frame.name)
                 break
-            if mod.partition('.')[0] in self.prefixes:
+            if mod.partition(".")[0] in self.prefixes:
                 last_candidate = (mod, frame.name)
 
         # if no explicit aggregation point is found, pick the topmost stack entry that
@@ -508,7 +559,10 @@ class Tracker:
             anchor = last_candidate
 
         if self.log_file:
-            print(f"dynamic:{' ' * len(self.stack)}: {anchor} {'[ignored]' if is_ignored else ''}", file=self.log_file)
+            print(
+                f"dynamic:{' ' * len(self.stack)}: {anchor} {'[ignored]' if is_ignored else ''}",
+                file=self.log_file,
+            )
 
         # mark stack height of dynamic import
         self.dynamic_stack = len(tb)

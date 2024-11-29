@@ -1,8 +1,8 @@
-
 import simple.baz
 
 
 var = "var-original"
+
 
 def function():
     return "function-original"
