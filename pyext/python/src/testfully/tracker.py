@@ -133,15 +133,15 @@ class Tracker:
             if base_ns not in self.prefixes:
                 return self.old_find_and_load(name, import_)
 
-            dynamic_idx, dynamic_anchor = self.record_dynamic_imports(
+            dynamic_idx, dynamic_anchor, is_ignored = self.record_dynamic_imports(
                 traceback.extract_stack()
-            ) if record_dynamic else (-1, None)
+            ) if record_dynamic else (-1, None, False)
 
             if dynamic_idx == -1:
-                return self._find_and_load_helper(name, import_)
+                return self._find_and_load_helper(name, import_, is_ignored)
 
             dynamic_base = None
-            if dynamic_anchor:
+            if dynamic_anchor and not is_ignored:
                 dynamic_base = self.cxt.copy()
                 # NB: we have to mark ourselves here, as we haven't yet added
                 # the modules in the stack to the file->module map so the
@@ -151,14 +151,14 @@ class Tracker:
                 self.dynamic_users.setdefault(self.stack[-1], set()).add(dynamic_anchor)
 
             try:
-                return self._find_and_load_helper(name, import_)
+                return self._find_and_load_helper(name, import_, is_ignored)
             finally:
-                if name in self.dynamic_users:
+                if name in self.dynamic_users and not is_ignored:
                     self.dynamic_users.setdefault(self.stack[-1], set()).update(self.dynamic_users[name])
 
                 # record dynamic imports
                 self.dynamic_stack = dynamic_idx
-                if dynamic_anchor:
+                if dynamic_base:
                     self.dynamic_imports.setdefault(
                         dynamic_anchor, set()
                     ).update(self.cxt - dynamic_base)
@@ -182,6 +182,11 @@ class Tracker:
                             continue
                         if self.log_file:
                             print(f"tracked:{' ' * len(self.stack)}{canonical} [fromlist: {from_name}]", file=self.log_file)
+                        # FIXME: handle dynamic_anchors / dynamic_ignores ?
+                        # it's technically possible, that someone would use __import__ with the `fromlist`
+                        # argument, and want those calls to be caught in dynamic aggregation/ignores
+                        # let's document this limitation for now and we can revisit if we ever want to
+                        # support this particular edge case, which seems pretty unlikely...
                         self.cxt.add(canonical)
                         if canonical in self.tracked:
                             self.cxt.update(self.tracked[canonical])
@@ -206,8 +211,7 @@ class Tracker:
             print("tracked: ", self.tracked, file= self.log_file)
             print("dynamic imports:", self.dynamic_imports, file= self.log_file)
             print("dynamic users:", self.dynamic_users, file= self.log_file)
-            if not isinstance(self.log_file, io.StringIO):
-                self.log_file.close()
+            self.log_file.close()
 
         bs = getattr(importlib, '_bootstrap')
         setattr(bs, '_handle_fromlist', self.old_handle_fromlist)
@@ -231,17 +235,27 @@ class Tracker:
         return self.tracked[m] | dyn
 
 
-    def _find_and_load_helper(self, name: str, import_: Any) -> Any:
+    def _find_and_load_helper(self, name: str, import_: Any, is_ignored: bool) -> Any:
         new_context = False
-        self.cxt.add(name)
-        if self.log_file:
-            flag = '*' if name in self.tracked else ('+' if name in sys.modules else ' ')
-            print(f"tracked:{' ' * len(self.stack)}{name} {flag}", file=self.log_file)
-        if name in self.tracked:
+        if not is_ignored:
+            self.cxt.add(name)
+            if self.log_file:
+                flag = '*' if name in self.tracked else ('+' if name in sys.modules else ' ')
+                print(f"tracked:{' ' * len(self.stack)}{name} {flag}", file=self.log_file)
+        if name not in self.tracked:
+            # not tracked yet: push a new context into the stack
+            # NB: the set is a reference, not a value, so changes to cxt
+            # are reflected in tracked[name], saving some indirections
+            tdeps = set()
+            self.tracked[name] = tdeps
+            self.stack.append(name)
+            self.cxt = tdeps
+            # mark that we need to pop down after forwarding
+            new_context = True
+        elif not is_ignored:
             # we're already tracking this one
             #  - fully resolved: tracked[] has the full transitive deps
             #  - import cycle: tracked[] deps might not be complete
-
             start_idx = next((i for i, v in enumerate(self.stack) if v == name), -1)
             if start_idx == -1:
                 self.cxt.update(self.tracked[name])
@@ -273,16 +287,6 @@ class Tracker:
                         self.tracked[mod] = consolidated
 
                 self.cxt = consolidated
-        else:
-            # not tracked yet: push a new context into the stack
-            # NB: the set is a reference, not a value, so changes to cxt
-            # are reflected in tracked[name], saving some indirections
-            tdeps = set()
-            self.tracked[name] = tdeps
-            self.stack.append(name)
-            self.cxt = tdeps
-            # mark that we need to pop down after forwarding
-            new_context = True
 
         has_err = False
         try:
@@ -325,9 +329,9 @@ class Tracker:
                 print(f"warn: {e}", file=self.log_file)
             if new_context:
                 # defer removal from self.tracked[] if we're within an import cycle
-                # NB: this should happen if there's an uncaught import error, in
-                # affirm code, which is not expected in practice, unless something
-                # is wrong with the codebase, but better safe than sorry...
+                # NB: this should happen if there's an uncaught import error, which
+                # is not expected in practice, unless something is wrong with the
+                # codebase under validation, but better safe than sorry...
                 if name not in self.stack[:-1]:
                     del self.tracked[name]
             raise
@@ -338,11 +342,11 @@ class Tracker:
                 n = self.stack[-1]
                 down = self.tracked[n]
                 # avoid potentially expensive no-op for cycles
-                if down is not self.cxt:
+                if down is not self.cxt and not is_ignored:
                     down.update(self.cxt)
                 self.cxt = down
 
-                if has_err:
+                if has_err and not is_ignored:
                     # we optimistically added a dependency before resolving the module
                     # remove it to avoid reporting spurious dependencies
                     # TODO: track "optional" deps separately?
@@ -371,23 +375,25 @@ class Tracker:
                 if caller_mod and caller_mod.partition('.')[0] in self.prefixes:
                     if self.log_file:
                         print(f"> use from {caller_mod}", file=self.log_file)
-                    self.dynamic_users.setdefault(caller_mod, set()).add((module_name, fn_name))
+                    self.dynamic_users.setdefault(caller_mod, set()).add((module_name, fn_name.rpartition('.')[2]))
             return fn(*args, **kwargs)
 
+        if self.log_file:
+            print(f"patching {module_name} {fn_name}", file=self.log_file)
         if '.' in fn_name:
+            # TODO: all arbitrary field chain?
             obj, method = fn_name.split('.', maxsplit=1)
             if hasattr(module, obj):
                 o = getattr(module, obj)
                 if hasattr(o, method):
                     fn = getattr(o, method)
-                    # TODO: patch the underlying class instead?
                     setattr(o, method, wraps(fn)(wrapped_fn))
         elif hasattr(module, fn_name):
             fn = getattr(module, fn_name)
             setattr(module, fn_name, wraps(fn)(wrapped_fn))
 
 
-    def record_dynamic_imports(self, tb: traceback.StackSummary) -> Tuple[int, Optional[str]]:
+    def record_dynamic_imports(self, tb: traceback.StackSummary) -> Tuple[int, Optional[str], bool]:
         # walk down the stack until we either find a recognizable dynamic import,
         # our import hook, or an import from the validator
         n = len(tb)
@@ -429,7 +435,7 @@ class Tracker:
 
         # ignore if it's coming from the validator
         if found == -1 or is_validator_frame(tb[found-1]):
-            return -1, None
+            return -1, None, False
 
         # record relevant slice of backtrace, stripping out anything pre-validator
         start = prev_stack + 1 + max(
@@ -446,6 +452,7 @@ class Tracker:
         # portion of the stack trace, or for an ignore point
         anchor = None
         last_candidate = None
+        is_ignored = False
 
         # keep track of where in the stack of tracked imports we are
         # So we can resolve filenames for modules currently being imported
@@ -475,7 +482,9 @@ class Tracker:
                 continue
 
             if mod in self.dynamic_ignores and frame.name in self.dynamic_ignores[mod]:
-                return -1, None
+                anchor = (mod, frame.name)
+                is_ignored = True
+                break
             if mod in self.dynamic_anchors and (
                     frame.name in self.dynamic_anchors[mod]
                     or any(a.rpartition('.')[2] == frame.name for a in self.dynamic_anchors[mod])
@@ -491,7 +500,7 @@ class Tracker:
             anchor = last_candidate
 
         if self.log_file:
-            print(f"dynamic:{' ' * len(self.stack)}: {anchor}", file=self.log_file)
+            print(f"dynamic:{' ' * len(self.stack)}: {anchor} {'[ignored]' if is_ignored else ''}", file=self.log_file)
 
         # mark stack height of dynamic import
         self.dynamic_stack = len(tb)
@@ -499,4 +508,4 @@ class Tracker:
         # only record stack for unexpected dynamic imports
         if anchor is None:
             self.dynamic.append(dyn_stack)
-        return prev_stack, anchor
+        return prev_stack, anchor, is_ignored
