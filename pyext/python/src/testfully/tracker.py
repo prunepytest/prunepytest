@@ -147,6 +147,7 @@ class Tracker:
                 # the modules in the stack to the file->module map so the
                 # wrapped function cannot resolve those filenames yet...
                 if self.log_file:
+                    # TODO: this is arguably not the right dynamic_user?
                     print(f"use from {self.stack[-1]}", file=self.log_file)
                 self.dynamic_users.setdefault(self.stack[-1], set()).add(dynamic_anchor)
 
@@ -219,12 +220,19 @@ class Tracker:
         builtins.__import__ = self.old_builtins_import
 
     def enter_context(self, cxt):
+        assert cxt not in self.stack
+        assert cxt not in self.tracked
+        deps = set()
         self.stack.append(cxt)
+        self.tracked[cxt] = deps
+        self.cxt = deps
 
     def exit_context(self, expected):
         actual = self.stack.pop()
-        if actual != expected:
-            raise ValueError(f"mismatching context entry/exit: {actual} != {expected}")
+        assert actual == expected
+        down = self.tracked[self.stack[-1]]
+        down.update(self.cxt)
+        self.cxt = down
 
     def with_dynamic(self, m) -> Set[str]:
         dyn = {

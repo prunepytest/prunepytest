@@ -1,3 +1,4 @@
+import io
 import pathlib
 import sys
 
@@ -8,6 +9,7 @@ from importlib import __import__ as importlib_import
 from importlib import import_module
 
 from .tracker_helper import CleanImportTrackerContext
+from testfully.tracker import Tracker
 
 
 def setup_module() -> None:
@@ -445,3 +447,53 @@ def test_dynamic_anchors_recorder_field() -> None:
     ):
         from dynamic import all_qux2
         all_qux2.all()
+
+def test_enter_exit_context() -> None:
+    with CleanImportTrackerContext(
+        "simple",
+        expect_tracked={
+            "": {"simple", "simple.foo"},
+            "whatsit": {"simple", "simple.foo"},
+            "simple": set(),
+            "simple.foo": {"simple"}
+        }
+    ) as cxt:
+        cxt.tracker.enter_context("whatsit")
+        from simple import foo
+        cxt.tracker.exit_context("whatsit")
+
+def test_enter_exit_context_must_match() -> None:
+    with CleanImportTrackerContext("simple") as cxt:
+        cxt.tracker.enter_context("whatsit")
+        with pytest.raises(AssertionError):
+            cxt.tracker.exit_context("notsame")
+
+def test_register_dynamic_recorder_for_previously_imported():
+    # NB: cannot use the clean context here...
+    t = Tracker()
+
+    # import before tracking, to exercise patching of already-imported modules
+    from dynamic import by_caller
+
+    details = io.StringIO()
+    t.start_tracking({'dynamic'},
+                     record_dynamic=True,
+                     dynamic_anchors={
+                         'dynamic.by_caller': {"import_by_name"}
+                     },
+                     log_file=details)
+
+    try:
+        from dynamic import all_qux2
+
+        assert t.tracked["dynamic.all_qux2"] == {"dynamic", "dynamic.by_caller"}
+        assert t.dynamic_users == {}
+        assert t.dynamic_imports == {}
+
+        all_qux2.all()
+
+        assert t.with_dynamic("dynamic.all_qux2") == {"dynamic", "dynamic.by_caller",
+                                          "dynamic._foo", "dynamic._bar", "dynamic._baz"}
+    except BaseException:
+        print(details.getvalue())
+        raise
