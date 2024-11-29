@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 pub struct MatcherNode {
     is_leaf: bool,
     children: HashMap<String, MatcherNode>,
@@ -8,13 +7,13 @@ pub struct MatcherNode {
 
 impl MatcherNode {
     pub fn new() -> MatcherNode {
-        MatcherNode{
+        MatcherNode {
             is_leaf: false,
             children: HashMap::new(),
         }
     }
 
-    pub fn from<'a, T: IntoIterator<Item=&'a String>>(values: T, sep: char) -> MatcherNode {
+    pub fn from<'a, T: IntoIterator<Item = &'a String>>(values: T, sep: char) -> MatcherNode {
         let mut tree = Self::new();
         for val in values {
             tree.add(val, sep);
@@ -41,9 +40,7 @@ impl MatcherNode {
             }
             match n.children.get(c) {
                 None => return false,
-                Some(m) => {
-                    n = m
-                }
+                Some(m) => n = m,
             }
         }
         n.is_leaf
@@ -54,9 +51,7 @@ impl MatcherNode {
         for c in value.split(sep) {
             match n.children.get(c) {
                 None => return false,
-                Some(m) => {
-                    n = m
-                }
+                Some(m) => n = m,
             }
         }
         !n.is_leaf
@@ -73,9 +68,9 @@ impl MatcherNode {
                     n = m;
                 }
             }
-            idx += c.len()+1;
+            idx += c.len() + 1;
             if n.is_leaf {
-                prefix_len = idx-1
+                prefix_len = idx - 1
             }
         }
         prefix_len
@@ -88,7 +83,7 @@ impl MatcherNode {
     pub fn all_suffixes_of_into<S, T>(&self, value: &str, sep: char, res: &mut T)
     where
         S: From<String>,
-        T: Extend<S>
+        T: Extend<S>,
     {
         let mut n = self;
         for c in value.split(sep) {
@@ -105,7 +100,7 @@ impl MatcherNode {
     fn all_suffixes_into<S, T>(&self, prefix: &str, sep: char, res: &mut T)
     where
         S: From<String>,
-        T: Extend<S>
+        T: Extend<S>,
     {
         for (name, child) in &self.children {
             let mut cp = prefix.to_string();

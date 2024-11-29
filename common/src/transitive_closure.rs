@@ -1,16 +1,18 @@
+use crate::moduleref::{
+    read_ustr_with_buf, write_ustr_to, ModuleRef, ModuleRefCache, ModuleRefVal,
+};
+use dashmap::DashMap;
+use hi_sparse_bitset::config::_128bit;
+use hi_sparse_bitset::BitSet;
+use log::{debug, warn};
+use speedy::private::{read_length_u64_varint, write_length_u64_varint};
+use speedy::{Context, Error, LittleEndian, Readable, Reader, Writable, Writer};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::ops::Sub;
-use dashmap::DashMap;
-use speedy::private::{read_length_u64_varint, write_length_u64_varint};
-use speedy::{Context, Error, LittleEndian, Readable, Reader, Writable, Writer};
 use ustr::{ustr, Ustr, UstrSet};
-use hi_sparse_bitset::{BitSet};
-use hi_sparse_bitset::config::{_128bit};
-use log::{debug, warn};
-use crate::moduleref::{read_ustr_with_buf, write_ustr_to, ModuleRef, ModuleRefCache, ModuleRefVal};
 
 type CondensedRef = usize;
 type CondensedNode = HashSet<ModuleRef>;
@@ -32,17 +34,20 @@ pub struct TransitiveClosure {
     ancestor: Vec<CondensedEdges>,
 
     //
-    pub unresolved: HashMap<Ustr, HashSet<ModuleRef>>
+    pub unresolved: HashMap<Ustr, HashSet<ModuleRef>>,
 }
 
 impl TransitiveClosure {
     pub fn unresolved(&self) -> HashMap<String, HashSet<String>> {
-        HashMap::from_iter(self.unresolved.iter().map(|(k, v)| (
-            k.to_string(),
-            HashSet::from_iter(v.iter().map(|&r|
-                self.module_refs.fs_for_ref(r).to_string()
-            ))
-        )))
+        HashMap::from_iter(self.unresolved.iter().map(|(k, v)| {
+            (
+                k.to_string(),
+                HashSet::from_iter(
+                    v.iter()
+                        .map(|&r| self.module_refs.fs_for_ref(r).to_string()),
+                ),
+            )
+        }))
     }
 }
 
@@ -50,10 +55,10 @@ impl TransitiveClosure {
     pub fn from(
         g: &DashMap<ModuleRef, HashSet<ModuleRef>>,
         refs: ModuleRefCache,
-        unresolved: HashMap<Ustr, HashSet<ModuleRef>>
+        unresolved: HashMap<Ustr, HashSet<ModuleRef>>,
     ) -> TransitiveClosure {
         let n = refs.max_value() as usize;
-        let mut state = StackTC{
+        let mut state = StackTC {
             max_d: 0,
             d: vec![0; n],
             root: vec![ModuleRef::MAX; n],
@@ -79,7 +84,7 @@ impl TransitiveClosure {
             }
         }
 
-        TransitiveClosure{
+        TransitiveClosure {
             module_refs: refs,
             mod_to_condensed: state.comp,
             condensed_to_mod: state.scc,
@@ -90,10 +95,8 @@ impl TransitiveClosure {
     }
 
     pub fn from_file(filepath: &str) -> Result<TransitiveClosure, Error> {
-        let file = File::open(filepath)
-            .map_err(|e| Error::custom(e.to_string()))?;
-        let stream = zstd::Decoder::new(file)
-            .map_err(|e| Error::custom(e.to_string()))?;
+        let file = File::open(filepath).map_err(|e| Error::custom(e.to_string()))?;
+        let stream = zstd::Decoder::new(file).map_err(|e| Error::custom(e.to_string()))?;
         Self::read_from_stream_buffered_with_ctx(LittleEndian::default(), stream)
     }
 
@@ -111,13 +114,14 @@ impl TransitiveClosure {
             };
             ref_to_str.push(rs.to_string());
         }
-        refs.sort_by(|a, b | {
-            ref_to_str[*a as usize].cmp(&ref_to_str[*b as usize])
-        });
+        refs.sort_by(|a, b| ref_to_str[*a as usize].cmp(&ref_to_str[*b as usize]));
         let mut ref_to_idx = Vec::with_capacity(refs.len());
         ref_to_idx.resize(refs.len(), 0);
         for i in 0..refs.len() {
-            w.write_fmt(format_args!("V{:04x} : {}\n", i, ref_to_str[refs[i] as usize]))?;
+            w.write_fmt(format_args!(
+                "V{:04x} : {}\n",
+                i, ref_to_str[refs[i] as usize]
+            ))?;
             ref_to_idx[refs[i] as usize] = i;
         }
 
@@ -132,9 +136,7 @@ impl TransitiveClosure {
             nodes.sort();
             comp_to_str.push(format!("{}", nodes.join(",")));
         }
-        comps.sort_by(|a, b| {
-            comp_to_str[*a as usize].cmp(&comp_to_str[*b as usize])
-        });
+        comps.sort_by(|a, b| comp_to_str[*a as usize].cmp(&comp_to_str[*b as usize]));
 
         let mut comp_to_idx = Vec::with_capacity(comps.len());
         comp_to_idx.resize(comps.len(), 0);
@@ -148,7 +150,12 @@ impl TransitiveClosure {
                 succ.push(format!("C{:04x}", comp_to_idx[cs]));
             }
             succ.sort();
-            w.write_fmt(format_args!("C{:04x} ({}) -> {}\n", i, comp_to_str[c], succ.join(",")))?;
+            w.write_fmt(format_args!(
+                "C{:04x} ({}) -> {}\n",
+                i,
+                comp_to_str[c],
+                succ.join(",")
+            ))?;
         }
 
         Ok(())
@@ -176,8 +183,7 @@ impl TransitiveClosure {
     }
 
     pub fn to_file(&self, filepath: &str) -> Result<(), Error> {
-        let file = File::create(filepath)
-            .map_err(|e| Error::custom(e.to_string()))?;
+        let file = File::create(filepath).map_err(|e| Error::custom(e.to_string()))?;
         let stream = zstd::Encoder::new(file, 0)
             .map_err(|e| Error::custom(e.to_string()))?
             .auto_finish();
@@ -195,12 +201,18 @@ impl TransitiveClosure {
     }
 
     pub fn file_depends_on(&self, filepath: &str) -> Option<HashSet<Ustr>> {
-        self.module_refs.ref_for_fs(ustr(filepath))
+        self.module_refs
+            .ref_for_fs(ustr(filepath))
             .map(|m| self.depends_on(m))?
     }
 
-    pub fn module_depends_on(&self, module_import_path: &str, pkg_base: Option<&str>) -> Option<HashSet<Ustr>> {
-        self.module_refs.ref_for_py(ustr(module_import_path), pkg_base.map(ustr))
+    pub fn module_depends_on(
+        &self,
+        module_import_path: &str,
+        pkg_base: Option<&str>,
+    ) -> Option<HashSet<Ustr>> {
+        self.module_refs
+            .ref_for_py(ustr(module_import_path), pkg_base.map(ustr))
             .map(|m| self.depends_on(m))?
     }
 
@@ -214,32 +226,28 @@ impl TransitiveClosure {
         Some(deps)
     }
 
-    pub fn affected_by_modules<T: AsRef<str>, L: IntoIterator<Item=T>>(&self, modules: L)
-        -> HashMap<Ustr, UstrSet>
-    {
+    pub fn affected_by_modules<T: AsRef<str>, L: IntoIterator<Item = T>>(
+        &self,
+        modules: L,
+    ) -> HashMap<Ustr, UstrSet> {
         self.affected_by(
             modules,
-            |m| {
-                self.module_refs.ref_for_py(ustr(m), None)
-            },
+            |m| self.module_refs.ref_for_py(ustr(m), None),
             |rv| rv.py,
         )
     }
 
-    pub fn affected_by_files<T: AsRef<str>, L: IntoIterator<Item=T>>(&self, files: L)
-                                                                     -> HashMap<Ustr, UstrSet>
-    {
-        self.affected_by(
-            files,
-            |m| self.module_refs.ref_for_fs(ustr(m)),
-            |rv| rv.fs,
-        )
+    pub fn affected_by_files<T: AsRef<str>, L: IntoIterator<Item = T>>(
+        &self,
+        files: L,
+    ) -> HashMap<Ustr, UstrSet> {
+        self.affected_by(files, |m| self.module_refs.ref_for_fs(ustr(m)), |rv| rv.fs)
     }
 
     fn affected_by<T, L, Fin, Fout>(&self, l: L, f_in: Fin, f_out: Fout) -> HashMap<Ustr, UstrSet>
     where
         T: AsRef<str>,
-        L: IntoIterator<Item=T>,
+        L: IntoIterator<Item = T>,
         Fin: Fn(&str) -> Option<ModuleRef>,
         Fout: Fn(&ModuleRefVal) -> Ustr,
     {
@@ -249,13 +257,16 @@ impl TransitiveClosure {
             match f_in(module) {
                 None => {
                     warn!("not a relevant python module: {}", module);
-                    continue
-                },
+                    continue;
+                }
                 Some(module_ref) => {
-                    match self.ancestor.get(self.mod_to_condensed[module_ref as usize]) {
+                    match self
+                        .ancestor
+                        .get(self.mod_to_condensed[module_ref as usize])
+                    {
                         None => {
                             // eprintln!("0 tests affected by: {}", modified_file);
-                        },
+                        }
                         Some(scc) => {
                             // eprintln!("{} tests affected by: {}", modified_file, scc.len());
                             all_sccs.extend(scc);
@@ -271,14 +282,16 @@ impl TransitiveClosure {
                 let rv = self.module_refs.get(v);
                 // NB: filter out non-test
                 if rv.pkg.is_some() {
-                    grouped_by_pkg.entry(rv.pkg.unwrap()).or_default().insert(f_out(&rv));
+                    grouped_by_pkg
+                        .entry(rv.pkg.unwrap())
+                        .or_default()
+                        .insert(f_out(&rv));
                 }
             }
         }
         grouped_by_pkg
     }
 }
-
 
 struct StackTC {
     max_d: usize,
@@ -366,7 +379,7 @@ fn stack_tc(s: &mut StackTC, v: ModuleRef, g: &DashMap<ModuleRef, HashSet<Module
 fn first_valid_dep(refs: &ModuleRefCache, dep: &str) -> Option<ModuleRef> {
     let mut actual = dep;
     loop {
-        if let Some(r)  = refs.ref_for_py(ustr(actual), None) {
+        if let Some(r) = refs.ref_for_py(ustr(actual), None) {
             if actual != dep {
                 debug!("conv {} -> {}", dep, actual);
             }
@@ -379,8 +392,11 @@ fn first_valid_dep(refs: &ModuleRefCache, dep: &str) -> Option<ModuleRef> {
     }
 }
 
-
-fn convert_deps(tc: &TransitiveClosure, trigger: CondensedRef, deps: &HashSet<String>) -> CondensedEdges {
+fn convert_deps(
+    tc: &TransitiveClosure,
+    trigger: CondensedRef,
+    deps: &HashSet<String>,
+) -> CondensedEdges {
     let mut extra_deps = CondensedEdges::new();
     for d in deps {
         if let Some(mod_ref) = first_valid_dep(&tc.module_refs, &d) {
@@ -393,7 +409,6 @@ fn convert_deps(tc: &TransitiveClosure, trigger: CondensedRef, deps: &HashSet<St
     }
     extra_deps
 }
-
 
 pub fn apply_dynamic_edges_at_leaves(
     tc: &mut TransitiveClosure,
@@ -421,7 +436,7 @@ pub fn apply_dynamic_edges_at_leaves(
 
 fn apply_trigger(
     successors: &mut Vec<CondensedEdges>,
-    ancestors: &Vec<CondensedEdges>,  // NB: we're lying about this, but it's okay...
+    ancestors: &Vec<CondensedEdges>, // NB: we're lying about this, but it's okay...
     trigger: CondensedRef,
     triggered: CondensedRef,
     extra_deps: &CondensedEdges,
@@ -445,7 +460,10 @@ fn apply_trigger(
         // distinct...
         unsafe {
             std::ptr::from_ref(&ancestors[extra_dep])
-                .cast_mut().as_mut().unwrap().insert(triggered);
+                .cast_mut()
+                .as_mut()
+                .unwrap()
+                .insert(triggered);
         }
     }
 }
@@ -470,7 +488,13 @@ fn apply_unified_trigger(
         //       .iter().map(|&v| tc.module_refs.py_for_ref(v)).collect::<Vec<_>>(),
         //     extra_deps.iter().count(),
         // );
-        apply_trigger(&mut tc.successor, &tc.ancestor, trigger, triggered, extra_deps);
+        apply_trigger(
+            &mut tc.successor,
+            &tc.ancestor,
+            trigger,
+            triggered,
+            extra_deps,
+        );
     }
 }
 
@@ -496,16 +520,21 @@ fn apply_package_varying_trigger(
 
         if let Some(pkg) = rv.pkg {
             if let Some(extra_deps) = per_pkg_dep.get(&pkg) {
-                apply_trigger(&mut tc.successor, &tc.ancestor, trigger, triggered, extra_deps);
+                apply_trigger(
+                    &mut tc.successor,
+                    &tc.ancestor,
+                    trigger,
+                    triggered,
+                    extra_deps,
+                );
             }
         }
     }
 }
 
-
 impl<C> Writable<C> for TransitiveClosure
 where
-    C: Context
+    C: Context,
 {
     fn write_to<T: ?Sized + Writer<C>>(&self, w: &mut T) -> Result<(), C::Error> {
         w.write_value(&self.module_refs)?;
@@ -554,7 +583,7 @@ where
 
 impl<'a, C> Readable<'a, C> for TransitiveClosure
 where
-    C: Context
+    C: Context,
 {
     fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
         let module_refs = reader.read_value()?;
@@ -605,7 +634,7 @@ where
             unresolved.insert(m, modules);
         }
 
-        Ok(TransitiveClosure{
+        Ok(TransitiveClosure {
             module_refs,
             mod_to_condensed,
             condensed_to_mod,

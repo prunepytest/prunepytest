@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::sync::{RwLock};
-use ustr::{ustr, Ustr};
-use speedy::{Context, Readable, Reader, Writable, Writer};
 use speedy::private::{read_length_u64_varint, write_length_u64_varint};
+use speedy::{Context, Readable, Reader, Writable, Writer};
+use std::collections::HashMap;
+use std::sync::RwLock;
+use ustr::{ustr, Ustr};
 
 pub type ModuleRef = u32;
 
@@ -15,7 +15,7 @@ pub struct ModuleRefVal {
 
 impl ModuleRefVal {
     fn new(fs: Ustr, py: Ustr, pkg: Option<Ustr>) -> ModuleRefVal {
-        ModuleRefVal{ fs, py, pkg }
+        ModuleRefVal { fs, py, pkg }
     }
 }
 
@@ -38,7 +38,7 @@ impl LockedModuleRefCache {
                 fs_to_ref: HashMap::new(),
                 py_to_ref_global: HashMap::new(),
                 py_to_ref_local: HashMap::new(),
-            })
+            }),
         }
     }
 
@@ -77,24 +77,24 @@ impl LockedModuleRefCache {
     }
 }
 
-
 impl ModuleRefCache {
-
     fn from_values(values: Vec<ModuleRefVal>) -> Self {
         let mut fs_to_ref = HashMap::new();
         let mut py_to_ref_global = HashMap::new();
-        let mut py_to_ref_local: HashMap<Ustr, HashMap<Ustr, ModuleRef >> = HashMap::new();
+        let mut py_to_ref_local: HashMap<Ustr, HashMap<Ustr, ModuleRef>> = HashMap::new();
         for (i, v) in values.iter().enumerate() {
             if !v.fs.is_empty() {
                 fs_to_ref.insert(v.fs, i as ModuleRef);
             }
             match v.pkg {
                 None => py_to_ref_global.insert(v.py, i as ModuleRef),
-                Some(pkg) => py_to_ref_local.entry(pkg)
-                    .or_default().insert(v.py, i as ModuleRef),
+                Some(pkg) => py_to_ref_local
+                    .entry(pkg)
+                    .or_default()
+                    .insert(v.py, i as ModuleRef),
             };
         }
-        Self{
+        Self {
             values,
             fs_to_ref,
             py_to_ref_global,
@@ -122,12 +122,8 @@ impl ModuleRefCache {
 
     pub fn ref_for_py(&self, py: Ustr, pkg: Option<Ustr>) -> Option<ModuleRef> {
         match pkg {
-            Some(pkg) => {
-                Some(*self.py_to_ref_local.get(&pkg)?.get(&py)?)
-            },
-            None => {
-                Some(*self.py_to_ref_global.get(&py)?)
-            },
+            Some(pkg) => Some(*self.py_to_ref_local.get(&pkg)?.get(&py)?),
+            None => Some(*self.py_to_ref_global.get(&py)?),
         }
     }
 
@@ -140,18 +136,18 @@ impl ModuleRefCache {
         if fs.is_empty() {
             assert!(pkg.is_none());
             if let Some(r) = self.py_to_ref_global.get(&py) {
-                return *r
+                return *r;
             }
         } else if let Some(r) = self.fs_to_ref.get(&fs) {
             let mr = *r;
             assert_eq!(self.values[mr as usize].pkg, pkg);
-            return mr
+            return mr;
         } else if let Some(r) = self.ref_for_py(py, pkg) {
             let rfs = self.values[r as usize].fs;
             // we don't want hard mismatch here, but we allow soft mismatch for
             // weird cases where a namespace package has sibling modules
             assert!(rfs.is_empty() || rfs == fs);
-            return r
+            return r;
         }
 
         let rv = ModuleRefVal::new(fs.clone(), py.clone(), pkg.clone());
@@ -165,12 +161,17 @@ impl ModuleRefCache {
                 let d = self.py_to_ref_local.entry(pkg).or_default();
                 assert!(!d.contains_key(&py));
                 d.insert(py, r)
-            },
+            }
             None => {
-                assert!(!self.py_to_ref_global.contains_key(&py), "{} {} {:?}", py, fs,
-                        self.values[*self.py_to_ref_global.get(&py).unwrap() as usize]);
+                assert!(
+                    !self.py_to_ref_global.contains_key(&py),
+                    "{} {} {:?}",
+                    py,
+                    fs,
+                    self.values[*self.py_to_ref_global.get(&py).unwrap() as usize]
+                );
                 self.py_to_ref_global.insert(py, r)
-            },
+            }
         };
         r
     }
@@ -181,14 +182,20 @@ impl ModuleRefCache {
             if !rv.fs.is_empty() {
                 assert_eq!(self.ref_for_fs(rv.fs), Some(r as ModuleRef));
             }
-            assert_eq!(self.ref_for_py(rv.py, rv.pkg), Some(r as ModuleRef), "{} {:?}", rv.py, rv.pkg);
+            assert_eq!(
+                self.ref_for_py(rv.py, rv.pkg),
+                Some(r as ModuleRef),
+                "{} {:?}",
+                rv.py,
+                rv.pkg
+            );
         }
     }
 }
 
 impl<C> Writable<C> for ModuleRefVal
 where
-    C: Context
+    C: Context,
 {
     fn write_to<T: ?Sized + Writer<C>>(&self, writer: &mut T) -> Result<(), C::Error> {
         write_ustr_to(self.fs, writer)
@@ -197,24 +204,34 @@ where
     }
 }
 
-pub(crate) fn write_ustr_to<C: Context, T: ?Sized + Writer<C>>(s: Ustr, writer: &mut T) -> Result<(), C::Error> {
+pub(crate) fn write_ustr_to<C: Context, T: ?Sized + Writer<C>>(
+    s: Ustr,
+    writer: &mut T,
+) -> Result<(), C::Error> {
     write_length_u64_varint(s.len(), writer).and_then(|_| writer.write_bytes(s.as_bytes()))
 }
 
-pub(crate) fn read_ustr_with_buf<'a, C: Context, R: Reader<'a, C>>(reader: &mut R, buf: &mut Vec<u8>)
-    -> Result<Ustr, C::Error>
-{
-    buf.resize(read_length_u64_varint(reader).or_else(|e| return Err(e))?, 0);
-    reader.read_bytes(buf.as_mut_slice())
+pub(crate) fn read_ustr_with_buf<'a, C: Context, R: Reader<'a, C>>(
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+) -> Result<Ustr, C::Error> {
+    buf.resize(
+        read_length_u64_varint(reader).or_else(|e| return Err(e))?,
+        0,
+    );
+    reader
+        .read_bytes(buf.as_mut_slice())
         .or_else(|e| return Err(e))?;
-    Ok(ustr(std::str::from_utf8(buf.as_slice())
-        .map_err(|e| speedy::Error::custom(format!("{:?} {:?}", e, buf)))
-        .or_else(|e| return Err(e))?))
+    Ok(ustr(
+        std::str::from_utf8(buf.as_slice())
+            .map_err(|e| speedy::Error::custom(format!("{:?} {:?}", e, buf)))
+            .or_else(|e| return Err(e))?,
+    ))
 }
 
 impl<'a, C> Readable<'a, C> for ModuleRefVal
 where
-    C: Context
+    C: Context,
 {
     fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
         let mut buf: Vec<u8> = Vec::new();
@@ -225,11 +242,7 @@ where
             0 => None,
             _ => Some(pkg),
         };
-        Ok(ModuleRefVal{
-            fs,
-            py,
-            pkg,
-        })
+        Ok(ModuleRefVal { fs, py, pkg })
     }
 
     fn minimum_bytes_needed() -> usize {
@@ -239,7 +252,7 @@ where
 
 impl<C> Writable<C> for ModuleRefCache
 where
-    C: Context
+    C: Context,
 {
     fn write_to<T: ?Sized + Writer<C>>(&self, writer: &mut T) -> Result<(), C::Error> {
         let g = &self.values;
@@ -253,13 +266,17 @@ where
 
 impl<'a, C> Readable<'a, C> for ModuleRefCache
 where
-    C: Context
+    C: Context,
 {
     fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
         let sz = read_length_u64_varint(reader).or_else(|e| Err(e))?;
         let mut values = Vec::with_capacity(sz);
         for _ in 0..sz {
-            values.push(reader.read_value::<ModuleRefVal>().or_else(|e| return Err(e))?);
+            values.push(
+                reader
+                    .read_value::<ModuleRefVal>()
+                    .or_else(|e| return Err(e))?,
+            );
         }
         Ok(ModuleRefCache::from_values(values))
     }

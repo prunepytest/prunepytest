@@ -12,3 +12,9 @@ repos:
       stages: [manual]
     # auto-format
     - id: ruff-format
+
+- repo: https://github.com/doublify/pre-commit-rust
+  rev: v1.0
+  hooks:
+    - id: fmt
+#    - id: cargo-check
