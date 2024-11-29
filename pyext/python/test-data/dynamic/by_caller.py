@@ -1,5 +1,11 @@
-import os.path
-from traceback import extract_stack
 
-def import_by_caller():
-    __import__(f'dynamic._{os.path.basename(extract_stack()[-2].filename)[:-3]}')
+def import_by_name(name):
+    __import__(f'dynamic._{name}')
+
+class Importer:
+    def by_name(self, name):
+        if name:
+            import_by_name(name)
+
+
+importer = Importer()
