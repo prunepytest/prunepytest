@@ -3,8 +3,8 @@ use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::marker::Ungil;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyNone, PySequence, PySet, PyString};
+use pyo3::IntoPyObjectExt;
 use std::collections::{HashMap, HashSet};
-
 use ustr::{Ustr, UstrSet};
 
 use common::graph;
@@ -104,17 +104,17 @@ impl ModuleGraph {
     }
 
     #[pyo3(signature = (filepath))]
-    fn file_depends_on<'py>(&self, py: Python<'py>, filepath: &str) -> PyResult<PyObject> {
-        Ok(match self.tc.file_depends_on(filepath) {
-            None => PyNone::get_bound(py).into_py(py),
+    fn file_depends_on<'py>(&self, py: Python<'py>, filepath: &str) -> PyResult<Bound<'py, PyAny>> {
+        match self.tc.file_depends_on(filepath) {
+            None => PyNone::get(py).into_bound_py_any(py),
             Some(deps) => {
-                let r = PySet::empty_bound(py).or_else(|e| return Err(e))?;
+                let r = PySet::empty(py).or_else(|e| return Err(e))?;
                 for dep in &deps {
-                    r.add(PyString::new_bound(py, dep))?;
+                    r.add(PyString::new(py, dep))?;
                 }
-                r.into_py(py)
+                r.into_bound_py_any(py)
             }
-        })
+        }
     }
 
     #[pyo3(signature = (module_import_path, package_root = None))]
@@ -123,19 +123,17 @@ impl ModuleGraph {
         py: Python<'py>,
         module_import_path: &str,
         package_root: Option<&str>,
-    ) -> PyResult<PyObject> {
-        Ok(
-            match self.tc.module_depends_on(module_import_path, package_root) {
-                None => PyNone::get_bound(py).into_py(py),
-                Some(deps) => {
-                    let r = PySet::empty_bound(py).or_else(|e| return Err(e))?;
-                    for dep in &deps {
-                        r.add(PyString::new_bound(py, dep))?;
-                    }
-                    r.into_py(py)
+    ) -> PyResult<Bound<'py, PyAny>> {
+        match self.tc.module_depends_on(module_import_path, package_root) {
+            None => PyNone::get(py).into_bound_py_any(py),
+            Some(deps) => {
+                let r = PySet::empty(py).or_else(|e| return Err(e))?;
+                for dep in &deps {
+                    r.add(PyString::new(py, dep))?;
                 }
-            },
-        )
+                r.into_bound_py_any(py)
+            }
+        }
     }
 
     #[pyo3(signature = (files))]
@@ -164,13 +162,13 @@ where
     let modules: Vec<String> = to_vec(l).or_else(|e| return Err(e))?;
     let affected = py.allow_threads(|| f(modules));
 
-    let r = PyDict::new_bound(py);
+    let r = PyDict::new(py);
     for (pkg, test_files) in &affected {
-        let files = PySet::empty_bound(py)?;
+        let files = PySet::empty(py)?;
         for file in test_files {
-            files.add(PyString::new_bound(py, &file))?
+            files.add(PyString::new(py, &file))?
         }
-        r.set_item(PyString::new_bound(py, &pkg), files)?
+        r.set_item(PyString::new(py, &pkg), files)?
     }
 
     Ok(r)
