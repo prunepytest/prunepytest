@@ -457,9 +457,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d922163ba1f79c04bc49073ba7b32fd5a8d3b76a87c955921234b8e77333c51"
+checksum = "f402062616ab18202ae8319da13fa4279883a2b8a9d9f83f20dbade813ce1884"
 dependencies = [
  "cfg-if",
  "indoc",
@@ -475,9 +475,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc38c5feeb496c8321091edf3d63e9a6829eab4b863b4a6a65f26f3e9cc6b179"
+checksum = "b14b5775b5ff446dd1056212d778012cbe8a0fbffd368029fd9e25b514479c38"
 dependencies = [
  "once_cell",
  "target-lexicon",
@@ -485,9 +485,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-ffi"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94845622d88ae274d2729fcefc850e63d7a3ddff5e3ce11bd88486db9f1d357d"
+checksum = "9ab5bcf04a2cdcbb50c7d6105de943f543f9ed92af55818fd17b660390fc8636"
 dependencies = [
  "libc",
  "pyo3-build-config",
@@ -495,9 +495,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e655aad15e09b94ffdb3ce3d217acf652e26bbc37697ef012f5e5e348c716e5e"
+checksum = "0fd24d897903a9e6d80b968368a34e1525aeb719d568dba8b3d4bfa5dc67d453"
 dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
@@ -507,9 +507,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-macros-backend"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae1e3f09eecd94618f60a455a23def79f79eba4dc561a97324bf9ac8c6df30ce"
+checksum = "36c011a03ba1e50152b4b394b479826cad97e7a21eb52df179cd91ac411cbfbe"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -618,7 +618,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "ruff_python_ast"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.7.3#fbf140a665629ce31191e56918bec6a724a24617"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
 dependencies = [
  "aho-corasick",
  "bitflags",
@@ -635,7 +635,7 @@ dependencies = [
 [[package]]
 name = "ruff_python_parser"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.7.3#fbf140a665629ce31191e56918bec6a724a24617"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
 dependencies = [
  "bitflags",
  "bstr",
@@ -654,7 +654,7 @@ dependencies = [
 [[package]]
 name = "ruff_python_trivia"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.7.3#fbf140a665629ce31191e56918bec6a724a24617"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
 dependencies = [
  "itertools",
  "ruff_source_file",
@@ -665,7 +665,7 @@ dependencies = [
 [[package]]
 name = "ruff_source_file"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.7.3#fbf140a665629ce31191e56918bec6a724a24617"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
 dependencies = [
  "memchr",
  "ruff_text_size",
@@ -674,7 +674,7 @@ dependencies = [
 [[package]]
 name = "ruff_text_size"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.7.3#fbf140a665629ce31191e56918bec6a724a24617"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
 
 [[package]]
 name = "rustc-hash"

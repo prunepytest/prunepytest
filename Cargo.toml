@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.82"
 homepage = "https://github.com/huguesb/testfully"
 documentation = "https://github.com/huguesb/testfully"
 repository = "https://github.com/huguesb/testfully"
@@ -15,7 +15,7 @@ common = { path = "common" }
 cmd = { path = "cmd" }
 pyext = { path = "pyext" }
 
-pyo3 = {  version = "0.22.5", features = ["abi3-py37"] }
+pyo3 = {  version = "0.22.6", features = ["abi3-py37"] }
 walkdir = "2.5"
 ignore = "0.4.23"
 log = "0.4.22"
@@ -27,9 +27,9 @@ speedy = "0.8.7"
 ustr = "1.1.0"
 hi_sparse_bitset = "0.6.1"
 zstd = "0.13"
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.7.3" }
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.7.3" }
-ruff_text_size = { git = "https://github.com/astral-sh/ruff.git", tag = "0.7.3" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.8.1" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.8.1" }
+ruff_text_size = { git = "https://github.com/astral-sh/ruff.git", tag = "0.8.1" }
 
 [profile.release]
 debug = 1
