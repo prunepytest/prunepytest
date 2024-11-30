@@ -519,7 +519,11 @@ class Tracker:
             if frame.filename == __file__ and frame.name == "_find_and_load_helper":
                 stack_off += 1
                 fresh_import = True
-            if frame.filename in IGNORED_FRAMES:
+            # wait for the first sign of module-level code execution
+            # NB: this is more robust than just filtering for ignored frames by file
+            # because there might be any number of hooks/patches on top of the regular
+            # import machinery. Most notably, slipcover overrides exec_module...
+            if fresh_import and frame.name != "<module>":
                 continue
 
             mod = self.file_to_module.get(frame.filename)
