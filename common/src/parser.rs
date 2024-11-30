@@ -141,10 +141,10 @@ pub fn raw_get_all_imports(
     ).unwrap()
     });
 
-    let source = read_to_string(filepath).or_else(|e| Err(Error::IO(e)))?;
+    let source = read_to_string(filepath).map_err(Error::IO)?;
 
     Ok((
         filepath.ends_with("__init__.py") && RE.is_match_at(&source, 0),
-        raw_imports_from_module(&source, module, deep).or_else(|e| Err(Error::Parse(e)))?,
+        raw_imports_from_module(&source, module, deep).map_err(Error::Parse)?,
     ))
 }

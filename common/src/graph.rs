@@ -23,8 +23,7 @@ pub struct ModuleGraph {
 
     // prefix matching for package import/package paths
     import_matcher: MatcherNode,
-    package_matcher: MatcherNode,
-
+    // package_matcher: MatcherNode,
     modules_refs: LockedModuleRefCache,
     to_module_cache: DashMap<Ustr, ModuleRef>,
     dir_cache: DashMap<String, HashSet<String>>,
@@ -43,7 +42,7 @@ impl ModuleGraph {
     ) -> ModuleGraph {
         ModuleGraph {
             import_matcher: MatcherNode::from(packages.keys(), '.'),
-            package_matcher: MatcherNode::from(packages.values(), '/'),
+            // package_matcher: MatcherNode::from(packages.values(), '/'),
             packages,
             global_prefixes,
             local_prefixes,
@@ -316,7 +315,7 @@ impl ModuleGraph {
             .packages
             .get(self.import_matcher.longest_prefix(&dep, '.'))
         {
-            Some(dep_pkg_fs) => self.to_module_with_cache(&dep_pkg_fs, dep, None),
+            Some(dep_pkg_fs) => self.to_module_with_cache(dep_pkg_fs, dep, None),
             None => {
                 if self.is_local(&dep).unwrap_or(false) {
                     self.to_module_no_cache(pkg, dep, Some(ustr(pkg)))
@@ -377,7 +376,7 @@ impl ModuleGraph {
                     .packages
                     .get(self.import_matcher.longest_prefix(&dep, '.'))
                 {
-                    Some(dep_pkg_fs) => self.to_module_list(&dep_pkg_fs, dep, None),
+                    Some(dep_pkg_fs) => self.to_module_list(dep_pkg_fs, dep, None),
                     None => self.to_module_list(pkg, dep, Some(ustr(pkg))),
                 }
             }
@@ -388,7 +387,7 @@ impl ModuleGraph {
         let parallelism = thread::available_parallelism().unwrap().get();
 
         let mut package_it = self.packages.values();
-        let builder = &mut WalkBuilder::new(&package_it.next().unwrap());
+        let builder = &mut WalkBuilder::new(package_it.next().unwrap());
         for a in package_it {
             builder.add(a);
         }
@@ -429,13 +428,16 @@ impl ModuleGraph {
 
         drop(tx);
 
+        let mut res = Ok(());
         // check for errors during the walk
         for err in rx.iter() {
             error!("{}", err);
-            // NB: we only return the first one...
-            return Err(err);
+            if res.is_ok() {
+                // NB: we only return the first one...
+                res = Err(err);
+            }
         }
-        Ok(())
+        res
     }
 
     fn parse_one_file(&self, e: DirEntry, tx: &mpsc::Sender<parser::Error>) -> WalkState {
@@ -469,7 +471,7 @@ impl ModuleGraph {
         }
     }
 
-    fn module_or_parent(&self, m: &String) -> Option<ModuleRef> {
+    fn module_or_parent(&self, m: &str) -> Option<ModuleRef> {
         if let Some(r) = self.modules_refs.ref_for_py(ustr(m), None) {
             Some(r)
         } else if let Some((parent, _)) = m.rsplit_once('.') {
@@ -482,7 +484,7 @@ impl ModuleGraph {
     pub fn add_dynamic_dependencies(&self, dynamic_edges: HashMap<String, HashSet<String>>) {
         for (m, deps) in dynamic_edges {
             if let Some(r) = self.modules_refs.ref_for_py(ustr(&m), None) {
-                let rdeps = deps.iter().filter_map(|d| self.module_or_parent(&d));
+                let rdeps = deps.iter().filter_map(|d| self.module_or_parent(d));
                 self.global_ns.get_mut(&r).unwrap().extend(rdeps);
             }
         }

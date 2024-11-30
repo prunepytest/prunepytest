@@ -115,8 +115,7 @@ impl TransitiveClosure {
             ref_to_str.push(rs.to_string());
         }
         refs.sort_by(|a, b| ref_to_str[*a as usize].cmp(&ref_to_str[*b as usize]));
-        let mut ref_to_idx = Vec::with_capacity(refs.len());
-        ref_to_idx.resize(refs.len(), 0);
+        let mut ref_to_idx = vec![0; refs.len()];
         for i in 0..refs.len() {
             w.write_fmt(format_args!(
                 "V{:04x} : {}\n",
@@ -134,14 +133,13 @@ impl TransitiveClosure {
                 nodes.push(format!("V{:04x}", ref_to_idx[v as usize]));
             }
             nodes.sort();
-            comp_to_str.push(format!("{}", nodes.join(",")));
+            comp_to_str.push(nodes.join(",").to_string());
         }
-        comps.sort_by(|a, b| comp_to_str[*a as usize].cmp(&comp_to_str[*b as usize]));
+        comps.sort_by(|a, b| comp_to_str[*a].cmp(&comp_to_str[*b]));
 
-        let mut comp_to_idx = Vec::with_capacity(comps.len());
-        comp_to_idx.resize(comps.len(), 0);
+        let mut comp_to_idx = vec![0; comps.len()];
         for i in 0..comps.len() {
-            comp_to_idx[comps[i] as usize] = i;
+            comp_to_idx[comps[i]] = i;
         }
 
         for (i, &c) in comps.iter().enumerate() {
@@ -218,7 +216,7 @@ impl TransitiveClosure {
 
     pub fn depends_on(&self, m: ModuleRef) -> Option<HashSet<Ustr>> {
         let mut deps = HashSet::new();
-        for c in &self.successor[self.mod_to_condensed[m as usize] as usize] {
+        for c in &self.successor[self.mod_to_condensed[m as usize]] {
             for &v in &self.condensed_to_mod[c] {
                 deps.insert(self.module_refs.py_for_ref(v));
             }
@@ -399,10 +397,10 @@ fn convert_deps(
 ) -> CondensedEdges {
     let mut extra_deps = CondensedEdges::new();
     for d in deps {
-        if let Some(mod_ref) = first_valid_dep(&tc.module_refs, &d) {
+        if let Some(mod_ref) = first_valid_dep(&tc.module_refs, d) {
             let cref = tc.mod_to_condensed[mod_ref as usize];
             extra_deps.insert(cref);
-            for succ in &tc.successor[cref as usize].sub(&tc.successor[trigger as usize]) {
+            for succ in &tc.successor[cref].sub(&tc.successor[trigger]) {
                 extra_deps.insert(succ);
             }
         }
@@ -416,14 +414,14 @@ pub fn apply_dynamic_edges_at_leaves(
     per_package: &Vec<(String, HashMap<String, HashSet<String>>)>,
 ) {
     for (trigger, extra_deps) in unified {
-        if let Some(mod_ref) = tc.module_refs.ref_for_py(ustr(&trigger), None) {
+        if let Some(mod_ref) = tc.module_refs.ref_for_py(ustr(trigger), None) {
             let c = tc.mod_to_condensed[mod_ref as usize];
             let cd = convert_deps(tc, c, extra_deps);
             apply_unified_trigger(tc, c, &cd);
         }
     }
     for (trigger, per_pkg_deps) in per_package {
-        if let Some(mod_ref) = tc.module_refs.ref_for_py(ustr(&trigger), None) {
+        if let Some(mod_ref) = tc.module_refs.ref_for_py(ustr(trigger), None) {
             let c = tc.mod_to_condensed[mod_ref as usize];
             let mut d = HashMap::with_capacity(per_package.len());
             for (pkg, extra_deps) in per_pkg_deps {
@@ -435,8 +433,8 @@ pub fn apply_dynamic_edges_at_leaves(
 }
 
 fn apply_trigger(
-    successors: &mut Vec<CondensedEdges>,
-    ancestors: &Vec<CondensedEdges>, // NB: we're lying about this, but it's okay...
+    successors: &mut [CondensedEdges],
+    ancestors: &[CondensedEdges], // NB: we're lying about this, but it's okay...
     trigger: CondensedRef,
     triggered: CondensedRef,
     extra_deps: &CondensedEdges,
@@ -473,7 +471,7 @@ fn apply_unified_trigger(
     trigger: CondensedRef,
     extra_deps: &CondensedEdges,
 ) {
-    for triggered in &tc.ancestor[trigger as usize] {
+    for triggered in &tc.ancestor[trigger] {
         if triggered == trigger {
             continue;
         }
@@ -503,7 +501,7 @@ fn apply_package_varying_trigger(
     trigger: CondensedRef,
     per_pkg_dep: &HashMap<Ustr, CondensedEdges>,
 ) {
-    for triggered in &tc.ancestor[trigger as usize] {
+    for triggered in &tc.ancestor[trigger] {
         if triggered == trigger {
             continue;
         }

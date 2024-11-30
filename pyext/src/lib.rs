@@ -15,7 +15,7 @@ fn to_vec<'py, T>(v: Bound<'py, PyAny>) -> PyResult<Vec<T>>
 where
     T: FromPyObject<'py>,
 {
-    if let Ok(_) = v.downcast::<PyNone>() {
+    if v.downcast::<PyNone>().is_ok() {
         Ok(vec![])
     } else if let Ok(seq) = v.downcast::<PySequence>() {
         Ok(seq.extract::<Vec<T>>()?)
@@ -42,8 +42,8 @@ impl ModuleGraph {
                         external_prefixes=HashSet::default(),
                         dynamic_deps=HashMap::default(),
     ))]
-    fn new<'py>(
-        py: Python<'py>,
+    fn new(
+        py: Python<'_>,
         packages: HashMap<String, String>,
         global_prefixes: HashSet<String>,
         local_prefixes: HashSet<String>,
@@ -64,35 +64,35 @@ impl ModuleGraph {
                 }
                 Ok(g.finalize())
             })
-            .or_else(|e: parser::Error| return Err(PyErr::new::<PyException, _>(e.to_string())))?;
+            .map_err(|e: parser::Error| PyErr::new::<PyException, _>(e.to_string()))?;
         Ok(ModuleGraph { tc })
     }
 
     #[staticmethod]
     #[pyo3(signature = (filepath))]
-    fn from_file<'py>(py: Python<'py>, filepath: &str) -> PyResult<ModuleGraph> {
+    fn from_file(py: Python<'_>, filepath: &str) -> PyResult<ModuleGraph> {
         Ok(ModuleGraph {
             tc: py
                 .allow_threads(|| TransitiveClosure::from_file(filepath))
-                .or_else(|e| Err(PyErr::new::<PyException, _>(e.to_string())))?,
+                .map_err(|e| PyErr::new::<PyException, _>(e.to_string()))?,
         })
     }
 
     #[pyo3(signature = ())]
-    fn unresolved<'py>(&self) -> PyResult<HashMap<String, HashSet<String>>> {
+    fn unresolved(&self) -> PyResult<HashMap<String, HashSet<String>>> {
         Ok(self.tc.unresolved())
     }
 
     #[pyo3(signature = (filepath))]
-    fn to_file<'py>(&self, py: Python<'py>, filepath: &str) -> PyResult<()> {
+    fn to_file(&self, py: Python<'_>, filepath: &str) -> PyResult<()> {
         py.allow_threads(|| self.tc.to_file(filepath))
-            .or_else(|e| Err(PyErr::new::<PyException, _>(e.to_string())))
+            .map_err(|e| PyErr::new::<PyException, _>(e.to_string()))
     }
 
     #[pyo3(signature = (simple_unified, simple_per_package))]
-    fn add_dynamic_dependencies_at_edges<'py>(
+    fn add_dynamic_dependencies_at_edges(
         &mut self,
-        py: Python<'py>,
+        py: Python<'_>,
         simple_unified: Vec<(String, HashSet<String>)>,
         simple_per_package: Vec<(String, HashMap<String, HashSet<String>>)>,
     ) -> PyResult<()> {
@@ -108,7 +108,7 @@ impl ModuleGraph {
         match self.tc.file_depends_on(filepath) {
             None => PyNone::get(py).into_bound_py_any(py),
             Some(deps) => {
-                let r = PySet::empty(py).or_else(|e| return Err(e))?;
+                let r = PySet::empty(py)?;
                 for dep in &deps {
                     r.add(PyString::new(py, dep))?;
                 }
@@ -127,7 +127,7 @@ impl ModuleGraph {
         match self.tc.module_depends_on(module_import_path, package_root) {
             None => PyNone::get(py).into_bound_py_any(py),
             Some(deps) => {
-                let r = PySet::empty(py).or_else(|e| return Err(e))?;
+                let r = PySet::empty(py)?;
                 for dep in &deps {
                     r.add(PyString::new(py, dep))?;
                 }
@@ -159,33 +159,33 @@ fn affected_by<'py, F>(py: Python<'py>, l: Bound<'py, PyAny>, f: F) -> PyResult<
 where
     F: Ungil + Send + FnOnce(Vec<String>) -> HashMap<Ustr, UstrSet>,
 {
-    let modules: Vec<String> = to_vec(l).or_else(|e| return Err(e))?;
+    let modules: Vec<String> = to_vec(l)?;
     let affected = py.allow_threads(|| f(modules));
 
     let r = PyDict::new(py);
     for (pkg, test_files) in &affected {
         let files = PySet::empty(py)?;
         for file in test_files {
-            files.add(PyString::new(py, &file))?
+            files.add(PyString::new(py, file))?
         }
-        r.set_item(PyString::new(py, &pkg), files)?
+        r.set_item(PyString::new(py, pkg), files)?
     }
 
     Ok(r)
 }
 
 #[pyfunction]
-fn configure_logger<'py>(file: String, level: String) -> PyResult<()> {
+fn configure_logger(file: String, level: String) -> PyResult<()> {
     fern::Dispatch::new()
         .format(|out, message, record| out.finish(format_args!("{}: {}", record.level(), message)))
         .level(
             level
                 .parse()
-                .or_else(|e: ParseLevelError| Err(PyErr::new::<PyException, _>(e.to_string())))?,
+                .map_err(|e: ParseLevelError| PyErr::new::<PyException, _>(e.to_string()))?,
         )
         .chain(fern::log_file(file)?)
         .apply()
-        .or_else(|e| Err(PyErr::new::<PyException, _>(e.to_string())))?;
+        .map_err(|e| PyErr::new::<PyException, _>(e.to_string()))?;
     Ok(())
 }
 

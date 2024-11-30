@@ -30,6 +30,12 @@ pub struct LockedModuleRefCache {
     inner: RwLock<ModuleRefCache>,
 }
 
+impl Default for LockedModuleRefCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LockedModuleRefCache {
     pub fn new() -> LockedModuleRefCache {
         LockedModuleRefCache {
@@ -150,7 +156,7 @@ impl ModuleRefCache {
             return r;
         }
 
-        let rv = ModuleRefVal::new(fs.clone(), py.clone(), pkg.clone());
+        let rv = ModuleRefVal::new(fs, py, pkg);
         let r = self.values.len() as ModuleRef;
         self.values.push(rv);
         if !fs.is_empty() {
@@ -215,18 +221,11 @@ pub(crate) fn read_ustr_with_buf<'a, C: Context, R: Reader<'a, C>>(
     reader: &mut R,
     buf: &mut Vec<u8>,
 ) -> Result<Ustr, C::Error> {
-    buf.resize(
-        read_length_u64_varint(reader).or_else(|e| return Err(e))?,
-        0,
-    );
-    reader
-        .read_bytes(buf.as_mut_slice())
-        .or_else(|e| return Err(e))?;
-    Ok(ustr(
-        std::str::from_utf8(buf.as_slice())
-            .map_err(|e| speedy::Error::custom(format!("{:?} {:?}", e, buf)))
-            .or_else(|e| return Err(e))?,
-    ))
+    buf.resize(read_length_u64_varint(reader)?, 0);
+    reader.read_bytes(buf.as_mut_slice())?;
+    Ok(ustr(std::str::from_utf8(buf.as_slice()).map_err(|e| {
+        speedy::Error::custom(format!("{:?} {:?}", e, buf))
+    })?))
 }
 
 impl<'a, C> Readable<'a, C> for ModuleRefVal
@@ -235,9 +234,9 @@ where
 {
     fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
         let mut buf: Vec<u8> = Vec::new();
-        let fs = read_ustr_with_buf(reader, &mut buf).or_else(|e| return Err(e))?;
-        let py = read_ustr_with_buf(reader, &mut buf).or_else(|e| return Err(e))?;
-        let pkg = read_ustr_with_buf(reader, &mut buf).or_else(|e| return Err(e))?;
+        let fs = read_ustr_with_buf(reader, &mut buf)?;
+        let py = read_ustr_with_buf(reader, &mut buf)?;
+        let pkg = read_ustr_with_buf(reader, &mut buf)?;
         let pkg = match pkg.len() {
             0 => None,
             _ => Some(pkg),
@@ -256,9 +255,9 @@ where
 {
     fn write_to<T: ?Sized + Writer<C>>(&self, writer: &mut T) -> Result<(), C::Error> {
         let g = &self.values;
-        write_length_u64_varint(g.len(), writer).or_else(|e| return Err(e))?;
+        write_length_u64_varint(g.len(), writer)?;
         for v in g.iter() {
-            writer.write_value(v).or_else(|e| return Err(e))?;
+            writer.write_value(v)?;
         }
         Ok(())
     }
@@ -269,14 +268,10 @@ where
     C: Context,
 {
     fn read_from<R: Reader<'a, C>>(reader: &mut R) -> Result<Self, C::Error> {
-        let sz = read_length_u64_varint(reader).or_else(|e| Err(e))?;
+        let sz = read_length_u64_varint(reader)?;
         let mut values = Vec::with_capacity(sz);
         for _ in 0..sz {
-            values.push(
-                reader
-                    .read_value::<ModuleRefVal>()
-                    .or_else(|e| return Err(e))?,
-            );
+            values.push(reader.read_value::<ModuleRefVal>()?);
         }
         Ok(ModuleRefCache::from_values(values))
     }

@@ -5,6 +5,12 @@ pub struct MatcherNode {
     children: HashMap<String, MatcherNode>,
 }
 
+impl Default for MatcherNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MatcherNode {
     pub fn new() -> MatcherNode {
         MatcherNode {
