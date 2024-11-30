@@ -201,7 +201,11 @@ class Tracker:
                         from_name = "{}.{}".format(module.__name__, x)
                         from_val = getattr(module, x)
                         # is this actually a module?
-                        if not isinstance(from_val, types.ModuleType):
+                        # NB: we avoid isinstance() because it fetches attributes, which
+                        # causes all kinds of nasty interaction with lazy object proxies
+                        # which suddenly get instantiated early, sometimes causing errors,
+                        # and sometimes more subtle behavior changes...
+                        if type(from_val) is not types.ModuleType:
                             continue
                         canonical = from_val.__name__
                         if (
