@@ -577,7 +577,7 @@ def test_dynamic_anchors_recorder() -> None:
     with CleanImportTrackerContext(
         "dynamic",
         with_dynamic=True,
-        dynamic_anchors={"dynamic.by_caller": {"import_by_caller"}},
+        dynamic_anchors={"dynamic.by_caller": {"import_by_name"}},
         expect_tracked={
             "dynamic": set(),
             "dynamic.by_caller": {"dynamic"},
@@ -593,11 +593,65 @@ def test_dynamic_anchors_recorder() -> None:
         from dynamic import all_qux  # noqa: F401
 
 
+def test_dynamic_ignore_overrides_anchors_same() -> None:
+    with CleanImportTrackerContext(
+        "dynamic",
+        with_dynamic=True,
+        dynamic_ignores={"dynamic.by_caller": {"import_by_name"}},
+        dynamic_anchors={"dynamic.by_caller": {"import_by_name"}},
+        expect_tracked={
+            "dynamic": set(),
+            "dynamic.by_caller": {"dynamic"},
+            "dynamic.all_qux2": {
+                "dynamic",
+                "dynamic.by_caller",
+            },
+        },
+    ):
+        from dynamic import all_qux2  # noqa: F401
+
+
+def test_dynamic_ignore_overrides_anchors_before() -> None:
+    with CleanImportTrackerContext(
+        "dynamic",
+        with_dynamic=True,
+        dynamic_ignores={"dynamic.by_caller": {"import_by_name"}},
+        dynamic_anchors={"dynamic.by_caller": {"Importer.by_name"}},
+        expect_tracked={
+            "dynamic": set(),
+            "dynamic.by_caller": {"dynamic"},
+            "dynamic.all_qux2": {
+                "dynamic",
+                "dynamic.by_caller",
+            },
+        },
+    ):
+        from dynamic import all_qux2  # noqa: F401
+
+
+def test_dynamic_ignore_overrides_anchors_after() -> None:
+    with CleanImportTrackerContext(
+        "dynamic",
+        with_dynamic=True,
+        dynamic_ignores={"dynamic.by_caller": {"Importer.by_name"}},
+        dynamic_anchors={"dynamic.by_caller": {"import_by_name"}},
+        expect_tracked={
+            "dynamic": set(),
+            "dynamic.by_caller": {"dynamic"},
+            "dynamic.all_qux2": {
+                "dynamic",
+                "dynamic.by_caller",
+            },
+        },
+    ):
+        from dynamic import all_qux2  # noqa: F401
+
+
 def test_dynamic_anchors_recorder_aggregates_from_parent() -> None:
     with CleanImportTrackerContext(
         "dynamic",
         with_dynamic=True,
-        dynamic_anchors={"dynamic.by_caller": {"import_by_caller"}},
+        dynamic_anchors={"dynamic.by_caller": {"import_by_name"}},
         expect_tracked={
             "dynamic": set(),
             "dynamic.by_caller": {"dynamic"},

@@ -242,15 +242,19 @@ class Tracker:
     def stop_tracking(self) -> None:
         if self.log_file:
             print("--- stop tracking ", file=self.log_file)
-            print("tracked: ", self.tracked, file=self.log_file)
-            print("dynamic imports:", self.dynamic_imports, file=self.log_file)
-            print("dynamic users:", self.dynamic_users, file=self.log_file)
             self.log_file.close()
 
         bs = getattr(importlib, "_bootstrap")
         setattr(bs, "_handle_fromlist", self.old_handle_fromlist)
         setattr(bs, "_find_and_load", self.old_find_and_load)
         builtins.__import__ = self.old_builtins_import
+
+    def dump_all(self):
+        f = self.log_file if self.log_file else sys.stderr
+        print("--- dump", file=self.log_file)
+        print("tracked: ", self.tracked, file=f)
+        print("dynamic imports:", self.dynamic_imports, file=f)
+        print("dynamic users:", self.dynamic_users, file=f)
 
     def enter_context(self, cxt):
         assert cxt not in self.stack
@@ -358,7 +362,12 @@ class Tracker:
             # own parent, or partially resolved in a cycle that is being
             # consolidated...
             parent = name.rpartition(".")[0]
-            if parent and parent not in self.cxt and parent in self.tracked:
+            if (
+                parent
+                and parent not in self.cxt
+                and parent in self.tracked
+                and not is_ignored
+            ):
                 self.cxt.add(parent)
                 self.cxt.update(self.tracked[parent])
                 if parent in self.dynamic_users:
@@ -549,6 +558,8 @@ class Tracker:
                 anchor = (mod, frame.name)
                 is_ignored = True
                 break
+            elif anchor:
+                continue
             if mod in self.dynamic_anchors and (
                 frame.name in self.dynamic_anchors[mod]
                 or any(
@@ -557,8 +568,9 @@ class Tracker:
                 )
             ):
                 anchor = (mod, frame.name)
-                break
-            if mod.partition(".")[0] in self.prefixes:
+                # NB: do NOT break here, as we want to make sure we catch any ignore
+                # further down the stack!
+            elif mod.partition(".")[0] in self.prefixes:
                 last_candidate = (mod, frame.name)
 
         # if no explicit aggregation point is found, pick the topmost stack entry that
