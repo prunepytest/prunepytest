@@ -18,8 +18,9 @@ if [[ ! -d .venv ]] ; then
 fi
 source .venv/bin/activate
 
-pyver=$(python --version | cut -w -f 2)
-if (( "$(echo "$pyver" | cut -d. -f 2)" > 7 )) ; then
+pyver=$(python -c 'import sys ; print(".".join(str(v) for v in sys.version_info[0:2]))')
+pyminor=$(echo "$pyver" | cut -d. -f 2)
+if (( "$pyminor" > 7 )) ; then
   "${install_deps[@]}" requirements-dev.txt
 else
   "${install_deps[@]}" requirements-3.7.txt
@@ -34,13 +35,14 @@ if [[ -z "${INSTALL_ARGS}" ]] ; then
     |  grep -Eo '[^ ]+.whl$' \
     )" --force-reinstall
 else
+  # NB: lack of quotes around ${INSTALL_ARGS} is intentional
   "${pip[@]}" install ${INSTALL_ARGS}
 fi
 
-if (( "$(echo "$pyver" | cut -d. -f 2)" > 7 )) ; then
+if (( "$pyminor" > 7 )) ; then
   echo "With coverage"
   # TODO: enforce coverage thresholds
-  libpath=.venv/lib/python$(echo $pyver | cut -d. -f1,2)
+  libpath=".venv/lib/python$pyver"
   python -m slipcover --source $libpath/site-packages/testfully -m pytest --rootdir python
 else
   echo "Without coverage (${pyver} not supported by slipcover)"

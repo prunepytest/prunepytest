@@ -12,6 +12,13 @@ permissions:
   id-token: write
 
 jobs:
+  linters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+      - uses: pre-commit/action@v3.0.1
+
   # single python version because we use an abi3 wheel that works for 3.7+
   # and the workflow would fail if multiple jobs try to upload the same artifact
   linux:
@@ -46,11 +53,8 @@ jobs:
         if: matrix.platform.target == 'x86_64'
         working-directory: pyext
         run: |
-          set -e
-          python${{ matrix.python-version }} -m venv .venv
-          .venv/bin/python -m pip install --find-links dist --no-index --force-reinstall testfully
-          .venv/bin/python -m pip install pytest
-          .venv/bin/python -m pytest --rootdir python
+          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+          ./runtests.sh
 
   linux-extra-test:
     runs-on: ${{ matrix.platform.runner }}
@@ -77,12 +81,8 @@ jobs:
         if: matrix.platform.target == 'x86_64'
         working-directory: pyext
         run: |
-          set -e
-          python${{ matrix.python-version }} -m venv .venv
-          pkg=.venv/lib/python${{ matrix.python-version }}/site-packages
-          .venv/bin/python -m pip install --find-links dist --no-index --force-reinstall testfully
-          .venv/bin/python -m pip install pytest slipcover
-          .venv/bin/python -m slipcover --source $pkg/testfully -m pytest --rootdir python | sed "s#$pkg/##g"
+          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+          ./runtests.sh
       - uses: uraimo/run-on-arch-action@v2.8.1
         name: pytest-docker
         if: matrix.platform.target != 'x86_64'
@@ -94,16 +94,14 @@ jobs:
             set -e
             apt-get update
             apt-get install -y --no-install-recommends curl ca-certificates
+            apt-get install -y build-essential
             curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/bin sh
             uv python install ${{ matrix.python-version }}
           run: |
             set -e
             cd pyext
-            uv venv .venv --python ${{ matrix.python-version }} --seed
-            pkg=.venv/lib/python${{ matrix.python-version }}/site-packages
-            .venv/bin/python -m pip install --find-links dist --no-index --force-reinstall testfully
-            .venv/bin/python -m pip install pytest slipcover
-            .venv/bin/python -m slipcover --source $pkg/testfully -m pytest --rootdir python | sed "s#$pkg/##g"
+            export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+            ./runtests.sh
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -174,12 +172,8 @@ jobs:
       - name: pytest
         working-directory: pyext
         run: |
-          set -e
-          python${{ matrix.python-version }} -m venv .venv
-          pkg=.venv/lib/python${{ matrix.python-version }}/site-packages
-          .venv/bin/python -m pip install --find-links dist --no-index --force-reinstall testfully
-          .venv/bin/python -m pip install pytest slipcover
-          .venv/bin/python -m slipcover --source $pkg/testfully -m pytest --rootdir python | sed "s#$pkg/##g"
+          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+          ./runtests.sh
 
 
   release:
