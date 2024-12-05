@@ -45,10 +45,11 @@ import pathlib
 import sys
 import traceback
 
-from typing import Any, Callable, Dict, Set, Optional
+from typing import Callable, Dict, Set, Optional, Tuple
 
 from . import ModuleGraph
 from .api import ValidatorHook
+from .tracker import Tracker, print_clean_traceback
 from .util import (
     print_with_timestamp,
     load_import_graph,
@@ -74,18 +75,19 @@ def import_with_capture(fq: str, c_out: bool, c_err: bool) -> None:
 
 
 def recursive_import_tests(
-    path: str, import_prefix: str, hook: Any, errors: Dict[str, BaseException]
+    path: str, import_prefix: str, hook: ValidatorHook, errors: Dict[str, BaseException]
 ) -> Set[str]:
-    # catch stdout/stderr to prevent noise from packages being imported
-    capture_out = getattr(hook, "CAPTURE_STDOUT", True)
-    capture_err = getattr(hook, "CAPTURE_STDERR", True)
-
     imported = set()
 
+    # process __init__.py first if present
     init_py = os.path.join(path, "__init__.py")
     if os.path.exists(init_py):
         try:
-            import_with_capture(import_prefix, capture_out, capture_err)
+            import_with_capture(
+                import_prefix,
+                hook.should_capture_stdout(),
+                hook.should_capture_stderr(),
+            )
         except BaseException as ex:
             # NB: this should not happen, report so it can be fixed and proceed
             errors[init_py] = ex
@@ -97,22 +99,22 @@ def recursive_import_tests(
                     e.path, import_prefix + "." + e.name, hook, errors
                 )
             elif e.is_file() and is_test_file(e.name):
-                if hasattr(hook, "before_file"):
-                    hook.before_file(e, import_prefix)
+                hook.before_file(e, import_prefix)
                 fq = import_prefix + "." + e.name[:-3]
                 try:
-                    import_with_capture(fq, capture_out, capture_err)
+                    import_with_capture(
+                        fq, hook.should_capture_stdout(), hook.should_capture_stderr()
+                    )
                     imported.add(fq)
                 except BaseException as ex:
                     # NB: this should not happen, report so it can be fixed and proceed
                     errors[e.path] = ex
-                if hasattr(hook, "after_file"):
-                    hook.after_file(e, import_prefix)
+                hook.after_file(e, import_prefix)
 
     return imported
 
 
-def validate(
+def validate_subset(
     py_tracked: Dict[str, Set[str]],
     rust_graph: ModuleGraph,
     filter_fn: Callable[[str], bool],
@@ -138,12 +140,77 @@ def validate(
     return diff_count
 
 
-if __name__ == "__main__":
-    hook = load_hook_if_exists(pathlib.Path.cwd(), sys.argv[1], ValidatorHook)  # type: ignore[type-abstract]
+def validate_folder(
+    base: str, sub: str, hook: ValidatorHook, t: Tracker, g: ModuleGraph
+) -> Tuple[int, int]:
+    # print_with_timestamp(f"--- {base}")
+    # put package path first in sys.path to ensure finding test files
+    sys.path.insert(0, os.path.abspath(base))
+    old_k = set(sys.modules.keys())
 
-    from . import tracker
+    hook.before_folder(base, sub)
 
-    t = tracker.Tracker()
+    errors: Dict[str, BaseException] = {}
+
+    # we want to import every test file in that package, recursively,
+    # while preserving the appropriate import name, to allow for:
+    #  - resolution of __init__.py
+    #  - resolution of test helpers, via absolute or relative import
+    imported = recursive_import_tests(os.path.join(base, sub), sub, hook, errors)
+
+    if errors:
+        print(f"{len(errors)} exceptions encountered!")
+
+        for filepath, ex in errors.items():
+            print_with_timestamp(f"--- {filepath}")
+            print(f"{type(ex)} {ex}")
+            print_clean_traceback(traceback.extract_tb(ex.__traceback__))
+
+    with_dynamic = {}
+    for m in imported:
+        with_dynamic[m] = t.with_dynamic(m)
+
+    # NB: do validation at the package level for the test namespace
+    # this is necessary because it is not a unified namespace. There can be
+    # conflicts between similarly named test modules across packages.
+    #
+    # NB: we only validate test files, not test helpers. This is because, for
+    # performance reason, dynamic dependencies are only applied to nodes of the
+    # import graphs that do not have any ancestors (i.e modules not imported by
+    # any other module)
+    # This is fine because the purpose of this validation is to ensure that we
+    # can determine a set of affected *test files* from a given set of modified
+    # files, so as long as we validate that tests have matching imports between
+    # python and Rust, we're good to go.
+    def is_local_test_module(module: str) -> bool:
+        last = module.rpartition(".")[2]
+        return module.startswith(sub) and (
+            last.startswith("test_") or last.endswith("_test")
+        )
+
+    num_mismatching_files = validate_subset(
+        with_dynamic, g, package=base, filter_fn=is_local_test_module
+    )
+
+    # cleanup to avoid contaminating subsequent iterations
+    sys.path = sys.path[1:]
+    new_k = sys.modules.keys() - old_k
+    for m in new_k:
+        if m.partition(".")[0] == sub:
+            del t.tracked[m]
+            if m in t.dynamic_users:
+                del t.dynamic_users[m]
+            del sys.modules[m]
+
+    hook.after_folder(base, sub)
+
+    return len(errors), num_mismatching_files
+
+
+def validate(hook_path: str, graph_path: Optional[str]) -> Tuple[int, int]:
+    hook = load_hook_if_exists(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
+
+    t = Tracker()
     t.start_tracking(
         hook.global_namespaces() | hook.local_namespaces(),
         patches=hook.import_patches(),
@@ -156,7 +223,7 @@ if __name__ == "__main__":
     # NB: must be called after tracker, before module graph
     hook.setup()
 
-    g = load_import_graph(hook, sys.argv[2] if len(sys.argv) > 2 else None)
+    g = load_import_graph(hook, graph_path)
 
     # keep track or errors and import differences
     files_with_missing_imports = 0
@@ -171,72 +238,10 @@ if __name__ == "__main__":
         if not os.path.isdir(os.path.join(base, sub)):
             continue
 
-        # print_with_timestamp(f"--- {base}")
-        # put package path first in sys.path to ensure finding test files
-        sys.path.insert(0, os.path.abspath(base))
-        old_k = set(sys.modules.keys())
+        n_errors, n_mismatching_files = validate_folder(base, sub, hook, t, g)
 
-        hook.before_folder(base, sub)
-
-        errors: Dict[str, BaseException] = {}
-
-        # we want to import every test file in that package, recursively,
-        # while preserving the appropriate import name, to allow for:
-        #  - resolution of __init__.py
-        #  - resolution of test helpers, via absolute or relative import
-        imported = recursive_import_tests(os.path.join(base, sub), sub, hook, errors)
-
-        if errors:
-            error_count += len(errors)
-            print(f"{len(errors)} exceptions encountered!")
-
-            for filepath, ex in errors.items():
-                print_with_timestamp(f"--- {filepath}")
-                print(f"{type(ex)} {ex}")
-                tb = traceback.extract_tb(ex.__traceback__)
-                traceback.print_list(
-                    tb
-                    if tb[-1].filename == tracker.__file__
-                    else tracker.omit_tracker_frames(tb)
-                )
-
-        with_dynamic = {}
-        for m in imported:
-            with_dynamic[m] = t.with_dynamic(m)
-
-        # NB: do validation at the package level for the test namespace
-        # this is necessary because it is not a unified namespace. There can be
-        # conflicts between similarly named test modules across packages.
-        #
-        # NB: we only validate test files, not test helpers. This is because, for
-        # performance reason, dynamic dependencies are only applied to nodes of the
-        # import graphs that do not have any ancestors (i.e modules not imported by
-        # any other module)
-        # This is fine because the purpose of this validation is to ensure that we
-        # can determine a set of affected *test files* from a given set of modified
-        # files, so as long as we validate that tests have matching imports between
-        # python and Rust, we're good to go.
-        def is_local_test_module(module: str) -> bool:
-            last = module.rpartition(".")[2]
-            return module.startswith(sub) and (
-                last.startswith("test_") or last.endswith("_test")
-            )
-
-        files_with_missing_imports += validate(
-            with_dynamic, g, package=base, filter_fn=is_local_test_module
-        )
-
-        # cleanup to avoid contaminating subsequent iterations
-        sys.path = sys.path[1:]
-        new_k = sys.modules.keys() - old_k
-        for m in new_k:
-            if m.partition(".")[0] == sub:
-                del t.tracked[m]
-                if m in t.dynamic_users:
-                    del t.dynamic_users[m]
-                del sys.modules[m]
-
-        hook.after_folder(base, sub)
+        files_with_missing_imports += n_mismatching_files
+        error_count += n_errors
 
     t.stop_tracking()
 
@@ -253,21 +258,27 @@ if __name__ == "__main__":
 
     # validate global namespace once all packages have been processed
     print_with_timestamp("--- comparing code import graphs")
-    files_with_missing_imports += validate(
+    files_with_missing_imports += validate_subset(
         t.tracked,
         g,
         filter_fn=lambda module: module.partition(".")[0] in hook.global_namespaces(),
     )
 
+    return error_count, files_with_missing_imports
+
+
+if __name__ == "__main__":
+    n_err, m_missing = validate(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
+
     print_with_timestamp("--- validation result")
-    if error_count + files_with_missing_imports == 0:
+    if n_err + m_missing == 0:
         print("The rust module graph can be trusted")
         sys.exit(0)
     else:
-        if files_with_missing_imports:
+        if m_missing:
             print("The rust module graph is missing some imports")
             print("You may need to make some dynamic imports explicit")
-        if error_count:
+        if n_err:
             print("Errors prevented validation of the rust module graph")
             print("Fix them and try again...")
         sys.exit(1)

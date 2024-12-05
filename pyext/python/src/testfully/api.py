@@ -1,3 +1,4 @@
+import os
 from abc import ABC, abstractmethod, ABCMeta
 
 from typing import AbstractSet, Any, Mapping, Optional, Sequence, Tuple
@@ -64,10 +65,22 @@ class ValidatorMixin(ABC):
     @abstractmethod
     def test_folders(self) -> Mapping[str, str]: ...
 
+    def should_capture_stdout(self) -> bool:
+        return True
+
+    def should_capture_stderr(self) -> bool:
+        return True
+
     def before_folder(self, base: str, sub: str) -> None:
         pass
 
     def after_folder(self, base: str, sub: str) -> None:
+        pass
+
+    def before_file(self, dent: os.DirEntry[str], import_prefix: str) -> None:
+        pass
+
+    def after_file(self, dent: os.DirEntry[str], import_prefix: str) -> None:
         pass
 
 

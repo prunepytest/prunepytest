@@ -37,6 +37,14 @@ def omit_tracker_frames(
     return (frame for frame in tb if frame.filename not in IGNORED_FRAMES)
 
 
+def print_clean_traceback(tb: traceback.StackSummary) -> None:
+    """
+    Print a traceback, omitting Tracker-related stack frames, unless the topmost frame
+    is within Tracker code
+    """
+    traceback.print_list(tb if tb[-1].filename == __file__ else omit_tracker_frames(tb))
+
+
 def is_validator_frame(frame: traceback.FrameSummary) -> bool:
     return frame.name == "import_with_capture" and frame.filename.endswith(
         "validator.py"
