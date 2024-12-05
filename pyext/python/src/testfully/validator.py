@@ -138,7 +138,7 @@ def validate(
 
 
 if __name__ == "__main__":
-    hook = load_hook_if_exists(pathlib.Path.cwd(), sys.argv[1], ValidatorHook)
+    hook = load_hook_if_exists(pathlib.Path.cwd(), sys.argv[1], ValidatorHook)  # type: ignore[type-abstract]
 
     from . import tracker
 
@@ -177,7 +177,7 @@ if __name__ == "__main__":
 
         hook.before_folder(base, sub)
 
-        errors = {}
+        errors: Dict[str, BaseException] = {}
 
         # we want to import every test file in that package, recursively,
         # while preserving the appropriate import name, to allow for:

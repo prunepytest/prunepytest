@@ -8,8 +8,6 @@ from functools import wraps
 
 from typing import Any, Iterable, Mapping, Optional, Set, Tuple, AbstractSet
 
-EMPTY_SET = frozenset()
-
 
 IGNORED_FRAMES = {
     __file__,
@@ -18,7 +16,9 @@ IGNORED_FRAMES = {
 }
 
 
-def omit_tracker_frames(tb: traceback.StackSummary) -> Iterable[traceback.FrameSummary]:
+def omit_tracker_frames(
+    tb: Iterable[traceback.FrameSummary],
+) -> Iterable[traceback.FrameSummary]:
     """
     Remove stack frames associated with the import machinery or our hooking into it.
     This makes it easier to analyze any error that might be reported by the validator
@@ -82,7 +82,7 @@ class Tracker:
         self.tracked = {"": self.cxt}
         # optionally record locations of dynamic imports
         self.dynamic = []
-        self.dynamic_stack = 0
+        self.dynamic_stack: int = 0
         # optional aggregation of dynamic imports into "anchors"
         # this is useful to ensure the validator works reliably even
         # if some dynamic imports are being cached across tests
@@ -295,7 +295,7 @@ class Tracker:
             # not tracked yet: push a new context into the stack
             # NB: the set is a reference, not a value, so changes to cxt
             # are reflected in tracked[name], saving some indirections
-            tdeps = set()
+            tdeps: Set[str] = set()
             self.tracked[name] = tdeps
             self.stack.append(name)
             self.cxt = tdeps
@@ -410,7 +410,7 @@ class Tracker:
                     self.cxt.discard(name)
 
     def add_dynamic_usage_recorder(
-        self, module: str, module_name: str, fn_name: str
+        self, module: types.ModuleType, module_name: str, fn_name: str
     ) -> None:
         """
         Wraps a given function from a given module to record subsequent usages from
@@ -455,7 +455,7 @@ class Tracker:
 
     def record_dynamic_imports(
         self, tb: traceback.StackSummary
-    ) -> Tuple[int, Optional[str], bool]:
+    ) -> Tuple[int, Optional[Tuple[str, str]], bool]:
         # walk down the stack until we either find a recognizable dynamic import,
         # our import hook, or an import from the validator
         n = len(tb)
@@ -489,7 +489,7 @@ class Tracker:
             # for some reason the builtin is elided from the stack so catching a dynamic
             # import that uses the builtin requires looking at the actual code, which is
             # less reliable since the code is not always available...
-            if "__import__(" in frame.line:
+            if frame.line and "__import__(" in frame.line:
                 found = n - i + 1
                 break
 
@@ -518,7 +518,7 @@ class Tracker:
 
         # look for the first occurrence of a known aggregation point in the relevant
         # portion of the stack trace, or for an ignore point
-        anchor = None
+        anchor: Optional[Tuple[str, str]] = None
         last_candidate = None
         is_ignored = False
 

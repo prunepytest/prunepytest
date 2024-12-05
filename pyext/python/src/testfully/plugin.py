@@ -7,6 +7,8 @@ from warnings import WarningMessage
 import pytest
 import subprocess
 
+from typing import Set
+
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
 from .util import load_import_graph, load_hook, hook_zeroconf
@@ -79,7 +81,7 @@ def pytest_configure(config):
         return
 
     # old versions of pluggy do not have force_exception...
-    import pluggy
+    import pluggy  # type: ignore[import-untyped]
 
     if pluggy.__version__ < "1.2":
         raise ValueError("testfully requires pluggy>=1.2")
@@ -139,8 +141,7 @@ class TestfullyValidate:
             # TODO: override from pytest config?
             log_file=hook.tracker_log(),
         )
-        self.files_to_validate = set()
-        self.file_to_import = {}
+        self.files_to_validate: Set[str] = set()
         self.unexpected = (0, 0)
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)

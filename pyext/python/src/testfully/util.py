@@ -3,13 +3,14 @@ import os
 import pathlib
 import sys
 import time
-from typing import Any, Optional, Set, Tuple, Type, TypeVar
+from typing import cast, Any, Optional, Set, Tuple, Type, TypeVar
 
 from . import ModuleGraph
 from .api import ZeroConfHook, BaseHook
 
 
 Hook_T = TypeVar("Hook_T", bound=BaseHook)
+ZeroConfHook_T = TypeVar("ZeroConfHook_T", bound=ZeroConfHook)
 
 
 mono_ref = time.monotonic_ns()
@@ -25,7 +26,9 @@ def print_with_timestamp(*args, **kwargs) -> None:
 
 def import_file(name: str, filepath: str) -> Any:
     spec = importlib.util.spec_from_file_location(name, filepath)
+    assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
+    assert mod
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
@@ -89,7 +92,7 @@ def find_package_roots(root: pathlib.Path) -> Set[pathlib.Path]:
 def infer_ns_pkg(pkgroot: pathlib.Path) -> Tuple[pathlib.Path, str]:
     # walk down until first __init__.py without recognizable ns extend stanza
 
-    from testfully._testfully import file_looks_like_pkgutil_ns_init
+    from testfully import file_looks_like_pkgutil_ns_init
 
     ns = pkgroot.name
     first_non_ns = pkgroot
@@ -112,8 +115,9 @@ def infer_ns_pkg(pkgroot: pathlib.Path) -> Tuple[pathlib.Path, str]:
 
 
 def hook_zeroconf(
-    root: pathlib.Path, cls: Type[ZeroConfHook] = ZeroConfHook
-) -> ZeroConfHook:
+    root: pathlib.Path,
+    cls: Type[ZeroConfHook_T] = ZeroConfHook,  # type: ignore[assignment]
+) -> ZeroConfHook_T:
     """
     Try to infer global and local namespaces, for sane zero-conf behavior
     """
@@ -138,7 +142,8 @@ def hook_zeroconf(
     return cls(global_ns, local_ns, pkg_map, test_folders)
 
 
-def load_hook(root: pathlib.Path, hook: str, cls: Type[Hook_T]) -> Hook_T:
+# NB: base_cls can be abstract, ignore mypy warnings at call site...
+def load_hook(root: pathlib.Path, hook: str, base_cls: Type[Hook_T]) -> Hook_T:
     hook_mod_name = "testfully._hook"
     hook_mod = import_file(hook_mod_name, str(root / hook))
 
@@ -150,20 +155,22 @@ def load_hook(root: pathlib.Path, hook: str, cls: Type[Hook_T]) -> Hook_T:
             continue
         if not isinstance(val, type):
             continue
-        if not issubclass(val, cls):
+        if not issubclass(val, base_cls):
             continue
         print(name, val)
         if issubclass(val, ZeroConfHook):
-            return hook_zeroconf(root, val)
+            return cast(Hook_T, hook_zeroconf(root, val))
         return val()
 
-    raise ValueError(f"no implementation of {cls} found in {str(root / hook)}")
+    raise ValueError(f"no implementation of {base_cls} found in {str(root / hook)}")
 
 
+# NB: base_cls can be abstract, ignore mypy warnings at call site...
 def load_hook_if_exists(
-    root: pathlib.Path, candidate: str, cls: Type[Hook_T]
+    root: pathlib.Path, candidate: str, base_cls: Type[Hook_T]
 ) -> Hook_T:
     if (root / candidate).is_file():
-        return load_hook(root, candidate, cls)
+        return load_hook(root, candidate, base_cls)
 
-    return hook_zeroconf(root, cls)
+    assert issubclass(ZeroConfHook, base_cls)
+    return cast(Hook_T, hook_zeroconf(root, ZeroConfHook))

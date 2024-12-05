@@ -1,1 +1,1 @@
-from ._testfully import *  # noqa: F403
+from ._testfully import *  # type: ignore[import-not-found]  # noqa: F403
