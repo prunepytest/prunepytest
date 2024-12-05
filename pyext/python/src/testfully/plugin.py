@@ -7,7 +7,9 @@ from warnings import WarningMessage
 import pytest
 import subprocess
 
-from .util import import_file, load_import_graph
+from . import ModuleGraph
+from .api import PluginHook, ZeroConfHook
+from .util import load_import_graph, load_hook, hook_zeroconf
 from .tracker import Tracker
 
 
@@ -83,14 +85,14 @@ def pytest_configure(config):
         raise ValueError("testfully requires pluggy>=1.2")
 
     if opt.testfully_hook:
-        hook = import_file("testfully._hook", opt.testfully_hook)
+        hook = load_hook(config.rootpath, opt.testfully_hook, PluginHook)
     else:
-        # TODO: provide sensible defaults
-        pass
+        hook = hook_zeroconf(config.rootpath, ZeroConfHook)
 
     if opt.testfully_graph_root:
         rel_root = config.rootpath.relative_to(opt.testfully_graph_root)
     else:
+        # TODO: abstract out and support multiple VCS
         # the import graph is assumed to be full of repo-relative path
         # so we need to adjust in case of running tests in a subdir
         try:
@@ -123,20 +125,19 @@ def pytest_configure(config):
 
 
 class TestfullyValidate:
-    def __init__(self, hook, graph, rel_root):
+    def __init__(self, hook: PluginHook, graph: ModuleGraph, rel_root):
         self.hook = hook
         self.graph = graph
         self.rel_root = rel_root
         self.tracker = Tracker()
         self.tracker.start_tracking(
-            # TODO: sane default for simple repos to allow hook-free invocation
-            hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
-            patches=None,
+            hook.global_namespaces() | hook.local_namespaces(),
+            patches=hook.import_patches(),
             record_dynamic=True,
-            dynamic_anchors=getattr(hook, "DYNAMIC_AGGREGATE", None),
-            dynamic_ignores=getattr(hook, "DYNAMIC_IGNORE", None),
+            dynamic_anchors=hook.dynamic_anchors(),
+            dynamic_ignores=hook.dynamic_ignores(),
             # TODO: override from pytest config?
-            log_file=getattr(hook, "TRACKER_LOG", None),
+            log_file=hook.tracker_log(),
         )
         self.files_to_validate = set()
         self.file_to_import = {}
@@ -216,7 +217,7 @@ class TestfullyValidate:
 
 
 class TestfullySelect:
-    def __init__(self, hook, graph):
+    def __init__(self, hook: PluginHook, graph: ModuleGraph):
         self.hook = hook
         self.graph = graph
 

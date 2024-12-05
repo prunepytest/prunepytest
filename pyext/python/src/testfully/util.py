@@ -38,7 +38,7 @@ def is_test_file(name: str) -> bool:
     )
 
 
-def load_import_graph(hook, file: Optional[str]) -> ModuleGraph:
+def load_import_graph(hook: BaseHook, file: Optional[str]) -> ModuleGraph:
     # TODO: we could move most of this into a separate thread
     # load graph from file if provided, otherwise parse the repo
     if file and os.path.exists(file):
@@ -48,19 +48,19 @@ def load_import_graph(hook, file: Optional[str]) -> ModuleGraph:
         print_with_timestamp("--- building fresh import graph")
         g = ModuleGraph(
             hook.package_map(),
-            hook.GLOBAL_NAMESPACES,  # unified namespace
-            hook.LOCAL_NAMESPACES,  # per-pkg namespace
-            getattr(hook, "EXTERNAL_IMPORTS", set()) | {"importlib", "__import__"},
-            getattr(hook, "dynamic_dependencies", dict)(),
+            hook.global_namespaces(),  # unified namespace
+            hook.local_namespaces(),  # per-pkg namespace
+            hook.external_imports() | {"importlib", "__import__"},
+            hook.dynamic_dependencies(),
         )
 
         unresolved = g.unresolved()
         if unresolved:
             print(f"unresolved: {unresolved}")
 
-        if hasattr(hook, "dynamic_dependencies_at_edges"):
-            print_with_timestamp("--- computing dynamic dependencies")
-            unified, per_pkg = hook.dynamic_dependencies_at_edges()
+        print_with_timestamp("--- computing dynamic dependencies")
+        unified, per_pkg = hook.dynamic_dependencies_at_edges()
+        if unified or per_pkg:
             print_with_timestamp("--- incorporating dynamic dependencies")
             g.add_dynamic_dependencies_at_edges(unified, per_pkg)
 

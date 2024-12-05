@@ -41,12 +41,19 @@ import importlib
 import importlib.util
 import io
 import os
+import pathlib
 import sys
 import traceback
 
 from typing import Any, Callable, Dict, Set
 
-from .util import print_with_timestamp, import_file, load_import_graph, is_test_file
+from .api import ValidatorHook
+from .util import (
+    print_with_timestamp,
+    load_import_graph,
+    is_test_file,
+    load_hook_if_exists,
+)
 
 
 def import_with_capture(fq: str, c_out: bool, c_err: bool):
@@ -131,22 +138,22 @@ def validate(
 
 
 if __name__ == "__main__":
-    hook = import_file("testfully._hook", sys.argv[1])
+    hook = load_hook_if_exists(pathlib.Path.cwd(), sys.argv[1], ValidatorHook)
 
     from . import tracker
 
     t = tracker.Tracker()
     t.start_tracking(
-        hook.GLOBAL_NAMESPACES | hook.LOCAL_NAMESPACES,
-        patches=getattr(hook, "IMPORT_PATCHES", None),
+        hook.global_namespaces() | hook.local_namespaces(),
+        patches=hook.import_patches(),
         record_dynamic=True,
-        dynamic_anchors=getattr(hook, "DYNAMIC_AGGREGATE", None),
-        dynamic_ignores=getattr(hook, "DYNAMIC_IGNORE", None),
-        log_file=getattr(hook, "TRACKER_LOG", None),
+        dynamic_anchors=hook.dynamic_anchors(),
+        dynamic_ignores=hook.dynamic_ignores(),
+        log_file=hook.tracker_log(),
     )
 
-    if hasattr(hook, "setup"):
-        hook.setup()
+    # NB: must be called after tracker, before module graph
+    hook.setup()
 
     g = load_import_graph(hook, sys.argv[2] if len(sys.argv) > 2 else None)
 
@@ -157,7 +164,7 @@ if __name__ == "__main__":
     # TODO: user-defined order (toposort of package dep graph...)
     print_with_timestamp("--- tracking python imports")
     for base, sub in sorted(hook.test_folders().items()):
-        assert sub in hook.LOCAL_NAMESPACES, f"{sub} not in {hook.LOCAL_NAMESPACES}"
+        assert sub in hook.local_namespaces(), f"{sub} not in {hook.local_namespaces()}"
 
         # some packages do not have tests, simply skip them
         if not os.path.isdir(os.path.join(base, sub)):
@@ -168,8 +175,7 @@ if __name__ == "__main__":
         sys.path.insert(0, os.path.abspath(base))
         old_k = set(sys.modules.keys())
 
-        if hasattr(hook, "before_folder"):
-            hook.before_folder(base, sub)
+        hook.before_folder(base, sub)
 
         errors = {}
 
@@ -229,12 +235,11 @@ if __name__ == "__main__":
                     del t.dynamic_users[m]
                 del sys.modules[m]
 
-        if hasattr(hook, "after_folder"):
-            hook.after_folder(base, sub)
+        hook.after_folder(base, sub)
 
     t.stop_tracking()
 
-    if t.dynamic and getattr(hook, "RECORD_DYNAMIC", False):
+    if t.dynamic and hook.record_dynamic():
         print_with_timestamp("--- locations of dynamic imports")
         dedup_stack = set()
         for dyn_stack in t.dynamic:
@@ -250,7 +255,7 @@ if __name__ == "__main__":
     files_with_missing_imports += validate(
         t.tracked,
         g,
-        filter_fn=lambda module: module.partition(".")[0] in hook.GLOBAL_NAMESPACES,
+        filter_fn=lambda module: module.partition(".")[0] in hook.global_namespaces(),
     )
 
     print_with_timestamp("--- validation result")
