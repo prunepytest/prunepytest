@@ -1,3 +1,5 @@
+import os.path
+
 from testfully.util import infer_ns_pkg, find_package_roots, hook_zeroconf
 
 from .conftest import TEST_DATA
@@ -24,15 +26,15 @@ def test_infer_ns_pkg() -> None:
 
     # pkgutil-style ns packages
     assert infer_ns_pkg(TEST_DATA / "ns") == (
-        TEST_DATA / "ns/ns2/normal",
+        TEST_DATA / "ns" / "ns2" / "normal",
         "ns.ns2.normal",
     )
-    assert infer_ns_pkg(TEST_DATA / "ns/ns2") == (
-        TEST_DATA / "ns/ns2/normal",
+    assert infer_ns_pkg(TEST_DATA / "ns" / "ns2") == (
+        TEST_DATA / "ns" / "ns2" / "normal",
         "ns2.normal",
     )
-    assert infer_ns_pkg(TEST_DATA / "ns/ns2/normal") == (
-        TEST_DATA / "ns/ns2/normal",
+    assert infer_ns_pkg(TEST_DATA / "ns" / "ns2" / "normal") == (
+        TEST_DATA / "ns" / "ns2" / "normal",
         "normal",
     )
 
@@ -71,9 +73,13 @@ def test_hook_zeroconf() -> None:
     assert hook.global_namespaces() == {"testfully"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
     assert hook.package_map() == {
-        "testfully": "src/testfully",
-        "ns.ns2.normal": "test-data/ns/ns2/normal",
-        **{pkg: "test-data/" + pkg for pkg in expected_test_data_pkg if pkg != "ns"},
+        "testfully": os.path.join("src", "testfully"),
+        "ns.ns2.normal": os.path.join("test-data", "ns", "ns2", "normal"),
+        **{
+            pkg: os.path.join("test-data", pkg)
+            for pkg in expected_test_data_pkg
+            if pkg != "ns"
+        },
     }
     assert hook.test_folders() == {".": "tests"}
 
@@ -83,10 +89,10 @@ def test_hook_zeroconf() -> None:
     assert hook.global_namespaces() == {"testfully"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
     assert hook.package_map() == {
-        "testfully": "python/src/testfully",
-        "ns.ns2.normal": "python/test-data/ns/ns2/normal",
+        "testfully": os.path.join("python", "src", "testfully"),
+        "ns.ns2.normal": os.path.join("python", "test-data", "ns", "ns2", "normal"),
         **{
-            pkg: "python/test-data/" + pkg
+            pkg: os.path.join("python", "test-data", pkg)
             for pkg in expected_test_data_pkg
             if pkg != "ns"
         },
