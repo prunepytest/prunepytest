@@ -40,11 +40,14 @@ else
 fi
 
 if (( "$pyminor" > 7 )) ; then
-  echo "With coverage"
+  echo "--- pytest, with coverage"
   # TODO: enforce coverage thresholds
   libpath=".venv/lib/python$pyver"
   python -m slipcover --source $libpath/site-packages/testfully -m pytest --rootdir python
+
+  echo "--- mypy"
+  python -m mypy --strict --check-untyped-defs -p testfully
 else
-  echo "Without coverage (${pyver} not supported by slipcover)"
+  echo "--- pytest, without coverage (${pyver} not supported by slipcover)"
   python -m pytest --rootdir python
 fi

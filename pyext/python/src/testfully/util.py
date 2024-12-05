@@ -16,7 +16,7 @@ ZeroConfHook_T = TypeVar("ZeroConfHook_T", bound=ZeroConfHook)
 mono_ref = time.monotonic_ns()
 
 
-def print_with_timestamp(*args, **kwargs) -> None:
+def print_with_timestamp(*args: Any, **kwargs: Any) -> None:
     wall_elapsed_ms = (time.monotonic_ns() - mono_ref) // 1_000_000
     (kwargs["file"] if "file" in kwargs else sys.stdout).write(
         "[+{: 8}ms] ".format(wall_elapsed_ms)

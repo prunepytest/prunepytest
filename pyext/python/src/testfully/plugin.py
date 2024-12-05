@@ -4,10 +4,11 @@ pytest plugin
 
 from warnings import WarningMessage
 
+import pathlib
 import pytest
 import subprocess
 
-from typing import Set
+from typing import Any, Set
 
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
@@ -15,7 +16,7 @@ from .util import load_import_graph, load_hook, hook_zeroconf
 from .tracker import Tracker
 
 
-def pytest_addoption(parser, pluginmanager):
+def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     group = parser.getgroup(
         "automatically select tests affected by changes (testfully)"
     )
@@ -75,7 +76,7 @@ def pytest_addoption(parser, pluginmanager):
     )
 
 
-def pytest_configure(config) -> None:
+def pytest_configure(config: Any) -> None:
     opt = config.option
     if not opt.testfully:
         return
@@ -127,7 +128,9 @@ def pytest_configure(config) -> None:
 
 
 class TestfullyValidate:
-    def __init__(self, hook: PluginHook, graph: ModuleGraph, rel_root):
+    def __init__(
+        self, hook: PluginHook, graph: ModuleGraph, rel_root: pathlib.Path
+    ) -> None:
         self.hook = hook
         self.graph = graph
         self.rel_root = rel_root
@@ -145,7 +148,7 @@ class TestfullyValidate:
         self.unexpected = (0, 0)
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_runtestloop(self, session):
+    def pytest_runtestloop(self, session):  # type: ignore
         res = yield
 
         u = (0, 0)
@@ -182,7 +185,7 @@ class TestfullyValidate:
         return res
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_sessionfinish(self, session):
+    def pytest_sessionfinish(self, session):  # type: ignore
         self.tracker.stop_tracking()
 
         outcome = yield
@@ -200,7 +203,7 @@ class TestfullyValidate:
         return outcome
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_runtest_logstart(self, nodeid, location):
+    def pytest_runtest_logstart(self, nodeid, location):  # type: ignore
         f = location[0]
         self.files_to_validate.add(f)
         import_path = f[:-3].replace("/", ".")
@@ -209,7 +212,7 @@ class TestfullyValidate:
         return (yield)
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_runtest_logfinish(self, nodeid, location):
+    def pytest_runtest_logfinish(self, nodeid, location):  # type: ignore
         f = location[0]
         import_path = f[:-3].replace("/", ".")
         self.tracker.exit_context(import_path)
@@ -218,11 +221,11 @@ class TestfullyValidate:
 
 
 class TestfullySelect:
-    def __init__(self, hook: PluginHook, graph: ModuleGraph):
+    def __init__(self, hook: PluginHook, graph: ModuleGraph) -> None:
         self.hook = hook
         self.graph = graph
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_collection_modifyitems(self, session, config, items):
+    def pytest_collection_modifyitems(self, session, config, items):  # type: ignore
         # TODO
         return (yield)

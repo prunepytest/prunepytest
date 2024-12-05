@@ -45,8 +45,9 @@ import pathlib
 import sys
 import traceback
 
-from typing import Any, Callable, Dict, Set
+from typing import Any, Callable, Dict, Set, Optional
 
+from . import ModuleGraph
 from .api import ValidatorHook
 from .util import (
     print_with_timestamp,
@@ -56,7 +57,7 @@ from .util import (
 )
 
 
-def import_with_capture(fq: str, c_out: bool, c_err: bool):
+def import_with_capture(fq: str, c_out: bool, c_err: bool) -> None:
     with io.StringIO() as f:
         with contextlib.redirect_stdout(
             f
@@ -113,9 +114,9 @@ def recursive_import_tests(
 
 def validate(
     py_tracked: Dict[str, Set[str]],
-    rust_graph,
+    rust_graph: ModuleGraph,
     filter_fn: Callable[[str], bool],
-    package=None,
+    package: Optional[str] = None,
 ) -> int:
     diff_count = 0
     for module, pydeps in py_tracked.items():

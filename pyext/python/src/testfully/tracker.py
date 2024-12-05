@@ -4,6 +4,7 @@ import io
 import sys
 import traceback
 import types
+from collections.abc import Sequence
 from functools import wraps
 
 from typing import (
@@ -36,7 +37,7 @@ def omit_tracker_frames(
     return (frame for frame in tb if frame.filename not in IGNORED_FRAMES)
 
 
-def is_validator_frame(frame: traceback.FrameSummary):
+def is_validator_frame(frame: traceback.FrameSummary) -> bool:
     return frame.name == "import_with_capture" and frame.filename.endswith(
         "validator.py"
     )
@@ -49,13 +50,19 @@ def _apply_patch(o: object, attr_name: str, attr_val: Any) -> None:
     setattr(o, p[-1], attr_val.__call__(getattr(o, p[-1], None)))
 
 
-def apply_patches(name: str, patches) -> None:
+def apply_patches(name: str, patches: Mapping[str, Mapping[str, Any]]) -> None:
     m = sys.modules[name]
     for attr_name, attr_val in patches[name].items():
         _apply_patch(m, attr_name, attr_val)
 
 
-def _builtins_import_no_cache(name, globals=None, locals=None, fromlist=(), level=0):
+def _builtins_import_no_cache(
+    name: str,
+    globals: Optional[Mapping[str, Any]] = None,
+    locals: Optional[Mapping[str, Any]] = None,
+    fromlist: Sequence[str] = (),
+    level: int = 0,
+) -> Any:
     return importlib.__import__(name, globals, locals, fromlist, level)
 
 
@@ -198,7 +205,9 @@ class Tracker:
                         self.cxt - dynamic_base
                     )
 
-        def _new_handle_fromlist(module, fromlist, import_, **kwargs):
+        def _new_handle_fromlist(
+            module: types.ModuleType, fromlist: Any, import_: Any, **kwargs: Any
+        ) -> Any:
             if hasattr(module, "__path__"):
                 base_ns = module.__name__.partition(".")[0]
                 if base_ns in self.prefixes:
@@ -265,7 +274,7 @@ class Tracker:
         print("dynamic imports:", self.dynamic_imports, file=f)
         print("dynamic users:", self.dynamic_users, file=f)
 
-    def enter_context(self, cxt) -> None:
+    def enter_context(self, cxt: str) -> None:
         assert cxt not in self.stack
         assert cxt not in self.tracked
         deps: Set[str] = set()
@@ -273,14 +282,14 @@ class Tracker:
         self.tracked[cxt] = deps
         self.cxt = deps
 
-    def exit_context(self, expected) -> None:
+    def exit_context(self, expected: str) -> None:
         actual = self.stack.pop()
         assert actual == expected
         down = self.tracked[self.stack[-1]]
         down.update(self.cxt)
         self.cxt = down
 
-    def with_dynamic(self, m) -> Set[str]:
+    def with_dynamic(self, m: str) -> Set[str]:
         dyn = {
             i
             for u in self.dynamic_users.get(m, ())
@@ -434,7 +443,7 @@ class Tracker:
         into the dependencies for all caller modules
         """
 
-        def wrapped_fn(*args, **kwargs):
+        def wrapped_fn(*args: Any, **kwargs: Any) -> Any:
             tb = traceback.extract_stack()
             if self.log_file:
                 print(f"use: ({module_name}, {fn_name})", file=self.log_file)

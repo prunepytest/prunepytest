@@ -8,7 +8,7 @@ class BaseHook(ABC):
     API surface to create a ModuleGraph object
     """
 
-    def setup(self):
+    def setup(self) -> None:
         pass
 
     @abstractmethod
