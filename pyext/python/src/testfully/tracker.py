@@ -4,7 +4,6 @@ import io
 import sys
 import traceback
 import types
-from collections.abc import Sequence
 from functools import wraps
 
 from typing import (
@@ -14,6 +13,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Set,
     Tuple,
     AbstractSet,
