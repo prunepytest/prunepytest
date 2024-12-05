@@ -1,6 +1,4 @@
 import io
-import pathlib
-import sys
 
 import pytest
 
@@ -10,13 +8,6 @@ from importlib import import_module
 
 from .tracker_helper import CleanImportTrackerContext
 from testfully.tracker import Tracker
-
-
-def setup_module() -> None:
-    # add the test-data folder to the module search path so we can import our test cases
-    test_data_path = str(pathlib.PurePath(__file__).parents[2] / "test-data")
-    if test_data_path not in sys.path:
-        sys.path.insert(0, test_data_path)
 
 
 def test_import_statement() -> None:
