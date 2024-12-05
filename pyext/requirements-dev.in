@@ -1,3 +1,4 @@
 pytest>=7
 pluggy>=1.2
 slipcover ; python_full_version > "3.7"
+mypy==1.13
