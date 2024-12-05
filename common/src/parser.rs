@@ -59,7 +59,7 @@ impl<'a> ImportExtractor<'a> {
     }
 }
 
-impl<'a, 'b> SourceOrderVisitor<'b> for ImportExtractor<'a> {
+impl<'b> SourceOrderVisitor<'b> for ImportExtractor<'_> {
     fn visit_stmt(&mut self, stmt: &'b Stmt) {
         if let Some(imp) = stmt.as_import_stmt() {
             for n in &imp.names {
