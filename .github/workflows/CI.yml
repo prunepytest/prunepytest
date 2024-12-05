@@ -136,8 +136,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          python3 -m venv venv --symlinks
-          venv\Scripts\Activate.ps1
+          python3 -m venv .venv --symlinks
+          .venv\Scripts\Activate.ps1
           python -m pip install --find-links dist --no-index --force-reinstall testfully
           python -m pip install pytest
           python -m pytest --rootdir python
