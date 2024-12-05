@@ -189,9 +189,16 @@ fn configure_logger(file: String, level: String) -> PyResult<()> {
     Ok(())
 }
 
+#[pyfunction]
+fn file_looks_like_pkgutil_ns_init(file: String) -> PyResult<bool> {
+    parser::file_looks_like_pkgutil_ns_init(&file)
+        .map_err(|e| PyErr::new::<PyException, _>(e.to_string()))
+}
+
 #[pymodule]
 fn _testfully(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ModuleGraph>()?;
     m.add_function(wrap_pyfunction!(configure_logger, m)?)?;
+    m.add_function(wrap_pyfunction!(file_looks_like_pkgutil_ns_init, m)?)?;
     Ok(())
 }

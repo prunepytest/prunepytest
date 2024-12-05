@@ -130,21 +130,29 @@ pub fn raw_imports_from_module<'a>(
     Ok(extractor.imports)
 }
 
+pub fn content_looks_like_pkgutil_ns_init(source: &str) -> bool {
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r#"^__path__ *= *__import__ *\(('pkgutil'|"pkgutil")\).extend_path *\( *__path__ *, *__name__ *\)"#
+        ).unwrap()
+    });
+
+    RE.is_match_at(source, 0)
+}
+
+pub fn file_looks_like_pkgutil_ns_init(filepath: &str) -> Result<bool, Error> {
+    Ok(filepath.ends_with("__init__.py")
+        && content_looks_like_pkgutil_ns_init(&read_to_string(filepath).map_err(Error::IO)?))
+}
+
 pub fn raw_get_all_imports(
     filepath: &str,
     module: &str,
     deep: bool,
 ) -> Result<(bool, Vec<String>), Error> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-        r#"^__path__ *= *__import__ *\(('pkgutil'|"pkgutil")\).extend_path *\( *__path__ *, *__name__ *\)"#
-    ).unwrap()
-    });
-
     let source = read_to_string(filepath).map_err(Error::IO)?;
-
     Ok((
-        filepath.ends_with("__init__.py") && RE.is_match_at(&source, 0),
+        filepath.ends_with("__init__.py") && content_looks_like_pkgutil_ns_init(&source),
         raw_imports_from_module(&source, module, deep).map_err(Error::Parse)?,
     ))
 }
