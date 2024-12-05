@@ -75,7 +75,7 @@ def pytest_addoption(parser, pluginmanager):
     )
 
 
-def pytest_configure(config):
+def pytest_configure(config) -> None:
     opt = config.option
     if not opt.testfully:
         return
@@ -87,7 +87,7 @@ def pytest_configure(config):
         raise ValueError("testfully requires pluggy>=1.2")
 
     if opt.testfully_hook:
-        hook = load_hook(config.rootpath, opt.testfully_hook, PluginHook)
+        hook = load_hook(config.rootpath, opt.testfully_hook, PluginHook)  # type: ignore[type-abstract]
     else:
         hook = hook_zeroconf(config.rootpath, ZeroConfHook)
 
@@ -160,7 +160,7 @@ class TestfullyValidate:
             if not expected or not actual:
                 print(f"\nwarn: bad path mapping? {f} -> {import_path} / {graph_path}")
 
-            unexpected = actual - expected
+            unexpected = actual - (expected or set())
             if unexpected:
                 session.ihook.pytest_warning_recorded.call_historic(
                     kwargs=dict(

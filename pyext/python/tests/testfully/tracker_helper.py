@@ -2,7 +2,7 @@ import io
 import sys
 
 from testfully.tracker import Tracker
-from typing import AbstractSet, Mapping
+from typing import AbstractSet, Mapping, cast
 
 
 class CleanImportTrackerContext:
@@ -50,7 +50,7 @@ class CleanImportTrackerContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.tracker.dump_all()
-        details = self.tracker.log_file.getvalue()
+        details = cast(io.StringIO, self.tracker.log_file).getvalue()
         self.tracker.stop_tracking()
         self._cleanup()
 

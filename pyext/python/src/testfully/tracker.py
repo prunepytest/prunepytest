@@ -6,8 +6,18 @@ import traceback
 import types
 from functools import wraps
 
-from typing import Any, Iterable, Mapping, Optional, Set, Tuple, AbstractSet
-
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    AbstractSet,
+    Union,
+)
 
 IGNORED_FRAMES = {
     __file__,
@@ -74,29 +84,29 @@ class Tracker:
         "patches",
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.stack = [""]
-        self.cxt = set()
+        self.cxt: Set[str] = set()
         # map of fully-qualified module name to
         # *full* set of (fully-qualified names of) modules it depends on
         self.tracked = {"": self.cxt}
         # optionally record locations of dynamic imports
-        self.dynamic = []
+        self.dynamic: List[List[traceback.FrameSummary]] = []
         self.dynamic_stack: int = 0
         # optional aggregation of dynamic imports into "anchors"
         # this is useful to ensure the validator works reliably even
         # if some dynamic imports are being cached across tests
-        self.dynamic_anchors = {}
-        self.dynamic_ignores = {}
+        self.dynamic_anchors: Mapping[str, AbstractSet[str]] = {}
+        self.dynamic_ignores: Mapping[str, AbstractSet[str]] = {}
         # map: (module name, function name) -> set of dynamic imports
-        self.dynamic_imports = {}
+        self.dynamic_imports: Dict[Tuple[str, str], Set[str]] = {}
         # map: caller module -> set of anchors (module name, function name)
-        self.dynamic_users = {}
+        self.dynamic_users: Dict[str, Set[Tuple[str, str]]] = {}
         # map: file path to module path
-        self.file_to_module = {}
-        self.log_file = None
-        self.prefixes = set()
-        self.patches = None
+        self.file_to_module: Dict[str, str] = {}
+        self.log_file: Union[None, io.IOBase] = None
+        self.prefixes: AbstractSet[str] = set()
+        self.patches: Optional[Mapping[str, Any]] = None
 
     def start_tracking(
         self,
@@ -105,7 +115,7 @@ class Tracker:
         record_dynamic: bool = False,
         dynamic_anchors: Optional[Mapping[str, AbstractSet[str]]] = None,
         dynamic_ignores: Optional[Mapping[str, AbstractSet[str]]] = None,
-        log_file: Optional[str] = None,
+        log_file: Union[None, str, io.IOBase] = None,
     ) -> None:
         # The usual "public" hook is builtins.__import__
         # Hooking in there is not great for our purpose as it only catches
@@ -136,7 +146,7 @@ class Tracker:
         # resolve anchors to already-loaded modules
         # the rest will be resolved as needed when relevant modules are loaded
         for mod_name, m in sys.modules.items():
-            if hasattr(m, "__file__"):
+            if hasattr(m, "__file__") and m.__file__:
                 self.file_to_module[m.__file__] = mod_name
             if dynamic_anchors and mod_name in dynamic_anchors:
                 for fn in dynamic_anchors[mod_name]:
@@ -183,7 +193,7 @@ class Tracker:
 
                 # record dynamic imports
                 self.dynamic_stack = dynamic_idx
-                if dynamic_base:
+                if dynamic_anchor and dynamic_base:
                     self.dynamic_imports.setdefault(dynamic_anchor, set()).update(
                         self.cxt - dynamic_base
                     )
@@ -248,22 +258,22 @@ class Tracker:
         setattr(bs, "_find_and_load", self.old_find_and_load)
         builtins.__import__ = self.old_builtins_import
 
-    def dump_all(self):
+    def dump_all(self) -> None:
         f = self.log_file if self.log_file else sys.stderr
         print("--- dump", file=self.log_file)
         print("tracked: ", self.tracked, file=f)
         print("dynamic imports:", self.dynamic_imports, file=f)
         print("dynamic users:", self.dynamic_users, file=f)
 
-    def enter_context(self, cxt):
+    def enter_context(self, cxt) -> None:
         assert cxt not in self.stack
         assert cxt not in self.tracked
-        deps = set()
+        deps: Set[str] = set()
         self.stack.append(cxt)
         self.tracked[cxt] = deps
         self.cxt = deps
 
-    def exit_context(self, expected):
+    def exit_context(self, expected) -> None:
         actual = self.stack.pop()
         assert actual == expected
         down = self.tracked[self.stack[-1]]

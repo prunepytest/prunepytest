@@ -74,7 +74,7 @@ def load_import_graph(hook: BaseHook, file: Optional[str]) -> ModuleGraph:
     return g
 
 
-def find_package_roots(root: pathlib.Path) -> Set[pathlib.Path]:
+def find_package_roots(root: pathlib.PurePath) -> Set[pathlib.PurePath]:
     # TODO: parallel rust implementation?
     pkgs = set()
     with os.scandir(root) as it:
@@ -89,7 +89,7 @@ def find_package_roots(root: pathlib.Path) -> Set[pathlib.Path]:
     return pkgs
 
 
-def infer_ns_pkg(pkgroot: pathlib.Path) -> Tuple[pathlib.Path, str]:
+def infer_ns_pkg(pkgroot: pathlib.PurePath) -> Tuple[pathlib.PurePath, str]:
     # walk down until first __init__.py without recognizable ns extend stanza
 
     from testfully import file_looks_like_pkgutil_ns_init
@@ -115,7 +115,7 @@ def infer_ns_pkg(pkgroot: pathlib.Path) -> Tuple[pathlib.Path, str]:
 
 
 def hook_zeroconf(
-    root: pathlib.Path,
+    root: pathlib.PurePath,
     cls: Type[ZeroConfHook_T] = ZeroConfHook,  # type: ignore[assignment]
 ) -> ZeroConfHook_T:
     """
