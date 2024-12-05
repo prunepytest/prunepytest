@@ -1,3 +1,7 @@
+default_language_version:
+  python: python3.9
+  rust: "1.82"
+
 repos:
 - repo: https://github.com/astral-sh/ruff-pre-commit
   # Ruff version.

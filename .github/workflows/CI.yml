@@ -17,6 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
       - uses: pre-commit/action@v3.0.1
 
   # single python version because we use an abi3 wheel that works for 3.7+
