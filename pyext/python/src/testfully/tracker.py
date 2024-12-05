@@ -6,8 +6,7 @@ import traceback
 import types
 from functools import wraps
 
-from typing import Any, Iterable, Mapping, Optional, Set, Tuple
-
+from typing import Any, Iterable, Mapping, Optional, Set, Tuple, AbstractSet
 
 EMPTY_SET = frozenset()
 
@@ -101,11 +100,11 @@ class Tracker:
 
     def start_tracking(
         self,
-        prefixes: Set[str],
+        prefixes: AbstractSet[str],
         patches: Optional[Mapping[str, Any]] = None,
         record_dynamic: bool = False,
-        dynamic_anchors: Optional[Mapping[str, Set[str]]] = None,
-        dynamic_ignores: Optional[Mapping[str, Set[str]]] = None,
+        dynamic_anchors: Optional[Mapping[str, AbstractSet[str]]] = None,
+        dynamic_ignores: Optional[Mapping[str, AbstractSet[str]]] = None,
         log_file: Optional[str] = None,
     ) -> None:
         # The usual "public" hook is builtins.__import__
@@ -131,8 +130,8 @@ class Tracker:
 
         self.prefixes = prefixes
         self.patches = patches
-        self.dynamic_anchors = dynamic_anchors or set()
-        self.dynamic_ignores = dynamic_ignores or set()
+        self.dynamic_anchors = dynamic_anchors or {}
+        self.dynamic_ignores = dynamic_ignores or {}
 
         # resolve anchors to already-loaded modules
         # the rest will be resolved as needed when relevant modules are loaded
