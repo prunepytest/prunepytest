@@ -2,18 +2,22 @@
 pytest plugin
 """
 
+import sys
 from warnings import WarningMessage
 
 import pathlib
 import pytest
 import subprocess
 
-from typing import Any, Set
+from typing import Any, AbstractSet, Set
+
+from _pytest.config import ExitCode
 
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
 from .util import load_import_graph, load_hook, hook_zeroconf
 from .tracker import Tracker
+from .vcs.detect import detect_vcs
 
 
 def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
@@ -54,7 +58,7 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
         action="store",
         type=str,
         dest="testfully_hook",
-        help=("File in which the import graph is stored"),
+        help=("File containing an implementation of testfully.api.PluginHook"),
     )
 
     group.addoption(
@@ -62,7 +66,7 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
         action="store",
         type=str,
         dest="testfully_graph_root",
-        help=("File in which the import graph is stored"),
+        help=("Root path, to which all paths in the import graph are relative"),
     )
 
     group.addoption(
@@ -91,26 +95,20 @@ def pytest_configure(config: Any) -> None:
     else:
         hook = hook_zeroconf(config.rootpath, ZeroConfHook)
 
+    vcs = detect_vcs()
+
     if opt.testfully_graph_root:
         rel_root = config.rootpath.relative_to(opt.testfully_graph_root)
-    else:
-        # TODO: abstract out and support multiple VCS
+    elif vcs:
         # the import graph is assumed to be full of repo-relative path
         # so we need to adjust in case of running tests in a subdir
         try:
-            repo_root = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--show-toplevel"],
-                    stdin=subprocess.DEVNULL,
-                )
-                .decode("utf-8")
-                .rstrip()
-            )
+            repo_root = vcs.repo_root()
             rel_root = config.rootpath.relative_to(repo_root)
         except subprocess.CalledProcessError:
-            # if we're not in a git repo, assume
             rel_root = None
 
+    # TODO: chdir to make sure the import graph is for the whole repo?
     graph = load_import_graph(hook, opt.testfully_graph)
 
     if not opt.testfully_novalidate:
@@ -120,8 +118,26 @@ def pytest_configure(config: Any) -> None:
         )
 
     if not opt.testfully_noselect:
+        if vcs is None:
+            raise ValueError("unsupported VCS for test selection...")
+
+        # TODO: accept args to specify target and base commits
+        # TODO: extract derivation of affected set to helper function
+
+        if vcs.is_repo_clean():
+            print("deriving test set for changes in last commit")
+            modified = vcs.modified_files()
+        else:
+            print("deriving test set for uncommitted changes")
+            modified = vcs.dirty_files()
+
+        print(f"modified: {modified}", file=sys.stderr)
+
+        affected = graph.affected_by_files(modified)
+        print(f"affected: {affected}", file=sys.stderr)
+
         config.pluginmanager.register(
-            TestfullySelect(hook, graph),
+            TestfullySelect(affected | set(modified)),
             "TestfullySelect",
         )
 
@@ -220,11 +236,30 @@ class TestfullyValidate:
 
 
 class TestfullySelect:
-    def __init__(self, hook: PluginHook, graph: ModuleGraph) -> None:
-        self.hook = hook
-        self.graph = graph
+    def __init__(self, affected: AbstractSet[str]) -> None:
+        self.affected = affected
 
-    @pytest.hookimpl(tryfirst=True, hookwrapper=True)
+    @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):  # type: ignore
-        # TODO
-        return (yield)
+        n = len(items)
+        skipped = []
+
+        # loop from the end to easily remove items as we go
+        i = len(items) - 1
+        while i >= 0:
+            item = items[i]
+            keep = item.location[0] in self.affected
+            if not keep:
+                skipped.append(item)
+                del items[i]
+            i -= 1
+
+        session.ihook.pytest_deselected(items=skipped)
+
+        print(f"skipped: {len(skipped)}/{n}", file=sys.stderr)
+        print(f"remains: {items}")
+
+    @pytest.hookimpl(trylast=True)
+    def pytest_sessionfinish(self, session, exitstatus):
+        if exitstatus == ExitCode.NO_TESTS_COLLECTED:
+            session.exitstatus = ExitCode.OK
