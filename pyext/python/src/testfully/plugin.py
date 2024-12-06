@@ -54,7 +54,6 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
         action="store",
         type=str,
         dest="testfully_hook",
-        default="testfully-hook.py",
         help=("File in which the import graph is stored"),
     )
 

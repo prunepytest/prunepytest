@@ -165,14 +165,3 @@ def load_hook(root: pathlib.Path, hook: str, base_cls: Type[Hook_T]) -> Hook_T:
         return val()
 
     raise ValueError(f"no implementation of {base_cls} found in {str(root / hook)}")
-
-
-# NB: base_cls can be abstract, ignore mypy warnings at call site...
-def load_hook_if_exists(
-    root: pathlib.Path, candidate: str, base_cls: Type[Hook_T]
-) -> Hook_T:
-    if (root / candidate).is_file():
-        return load_hook(root, candidate, base_cls)
-
-    assert issubclass(ZeroConfHook, base_cls)
-    return cast(Hook_T, hook_zeroconf(root, ZeroConfHook))

@@ -54,7 +54,7 @@ from .util import (
     print_with_timestamp,
     load_import_graph,
     is_test_file,
-    load_hook_if_exists,
+    load_hook,
     hook_zeroconf,
 )
 
@@ -213,7 +213,7 @@ def validate(
     hook_path: Optional[str], graph_path: Optional[str] = None
 ) -> Tuple[int, int]:
     hook = (
-        load_hook_if_exists(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
+        load_hook(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
         if hook_path
         else hook_zeroconf(pathlib.Path.cwd())
     )
@@ -295,9 +295,6 @@ if __name__ == "__main__":
         else:
             print(f"invalid argument {sys.argv[i]}")
             sys.exit(2)
-
-    # from testfully import configure_logger
-    # configure_logger("/dev/stdout", "debug")
 
     n_err, m_missing = validate(hook_path=hook_path, graph_path=graph_path)
 
