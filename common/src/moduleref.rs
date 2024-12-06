@@ -152,7 +152,14 @@ impl ModuleRefCache {
             let rfs = self.values[r as usize].fs;
             // we don't want hard mismatch here, but we allow soft mismatch for
             // weird cases where a namespace package has sibling modules
-            assert!(rfs.is_empty() || rfs == fs);
+            assert!(
+                rfs.is_empty() || rfs == fs,
+                "{} {} {:?} {}",
+                py,
+                fs,
+                pkg,
+                rfs
+            );
             return r;
         }
 
