@@ -55,6 +55,7 @@ from .util import (
     load_import_graph,
     is_test_file,
     load_hook_if_exists,
+    hook_zeroconf,
 )
 
 
@@ -148,6 +149,7 @@ def validate_folder(
     sys.path.insert(0, os.path.abspath(base))
     old_k = set(sys.modules.keys())
 
+    sub_path = os.path.join(base, sub) if base != "." else sub
     hook.before_folder(base, sub)
 
     errors: Dict[str, BaseException] = {}
@@ -156,7 +158,7 @@ def validate_folder(
     # while preserving the appropriate import name, to allow for:
     #  - resolution of __init__.py
     #  - resolution of test helpers, via absolute or relative import
-    imported = recursive_import_tests(os.path.join(base, sub), sub, hook, errors)
+    imported = recursive_import_tests(sub_path, sub, hook, errors)
 
     if errors:
         print(f"{len(errors)} exceptions encountered!")
@@ -189,7 +191,7 @@ def validate_folder(
         )
 
     num_mismatching_files = validate_subset(
-        with_dynamic, g, package=base, filter_fn=is_local_test_module
+        with_dynamic, g, package=sub_path, filter_fn=is_local_test_module
     )
 
     # cleanup to avoid contaminating subsequent iterations
@@ -207,8 +209,14 @@ def validate_folder(
     return len(errors), num_mismatching_files
 
 
-def validate(hook_path: str, graph_path: Optional[str]) -> Tuple[int, int]:
-    hook = load_hook_if_exists(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
+def validate(
+    hook_path: Optional[str], graph_path: Optional[str] = None
+) -> Tuple[int, int]:
+    hook = (
+        load_hook_if_exists(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
+        if hook_path
+        else hook_zeroconf(pathlib.Path.cwd())
+    )
 
     t = Tracker()
     t.start_tracking(
@@ -268,7 +276,30 @@ def validate(hook_path: str, graph_path: Optional[str]) -> Tuple[int, int]:
 
 
 if __name__ == "__main__":
-    n_err, m_missing = validate(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
+    i = 1
+    hook_path = None
+    graph_path = None
+    while i < len(sys.argv):
+        if sys.argv[i] in {"--hook", "-h"}:
+            if len(sys.argv) < i + 2:
+                print(f"missing value for {sys.argv[i]} argument")
+                sys.exit(2)
+            hook_path = sys.argv[i + 1]
+            i += 2
+        elif sys.argv[i] in {"--graph", "-g"}:
+            if len(sys.argv) < i + 2:
+                print(f"missing value for {sys.argv[i]} argument")
+                sys.exit(2)
+            graph_path = sys.argv[i + 1]
+            i += 2
+        else:
+            print(f"invalid argument {sys.argv[i]}")
+            sys.exit(2)
+
+    # from testfully import configure_logger
+    # configure_logger("/dev/stdout", "debug")
+
+    n_err, m_missing = validate(hook_path=hook_path, graph_path=graph_path)
 
     print_with_timestamp("--- validation result")
     if n_err + m_missing == 0:
