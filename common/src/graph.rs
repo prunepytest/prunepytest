@@ -1,7 +1,7 @@
 use crate::matcher::MatcherNode;
 use crate::moduleref::{LockedModuleRefCache, ModuleRef, ModuleRefCache};
 use crate::parser;
-use crate::parser::{raw_get_all_imports, split_at_depth};
+use crate::parser::raw_get_all_imports;
 use crate::transitive_closure::TransitiveClosure;
 use dashmap::{DashMap, Entry};
 use ignore::{DirEntry, WalkBuilder, WalkState};
@@ -13,7 +13,9 @@ use ustr::{ustr, Ustr};
 
 pub struct ModuleGraph {
     // input map of python import path to toplevel package path
-    packages: HashMap<String, String>,
+    source_roots: HashMap<String, String>, // fs->py
+    import_roots: HashMap<String, String>, // py->fs
+
     global_prefixes: HashSet<String>,
     local_prefixes: HashSet<String>,
 
@@ -23,9 +25,9 @@ pub struct ModuleGraph {
 
     // prefix matching for package import/package paths
     import_matcher: MatcherNode,
-    // package_matcher: MatcherNode,
+    package_matcher: MatcherNode,
+
     modules_refs: LockedModuleRefCache,
-    to_module_cache: DashMap<Ustr, ModuleRef>,
     dir_cache: DashMap<String, HashSet<String>>,
 
     // collected imports
@@ -33,22 +35,42 @@ pub struct ModuleGraph {
     unresolved: DashMap<Ustr, HashSet<ModuleRef>>,
 }
 
+fn root_namespace(name: &str) -> &str {
+    match name.find('.') {
+        Some(idx) => &name[..idx],
+        None => name,
+    }
+}
+
 impl ModuleGraph {
     pub fn new(
-        packages: HashMap<String, String>,
+        source_roots: HashMap<String, String>,
         global_prefixes: HashSet<String>,
         local_prefixes: HashSet<String>,
         external_prefixes: HashSet<String>,
     ) -> ModuleGraph {
         ModuleGraph {
-            import_matcher: MatcherNode::from(packages.keys(), '.'),
-            // package_matcher: MatcherNode::from(packages.values(), '/'),
-            packages,
+            // NB: exclude local ns from import matcher
+            import_matcher: MatcherNode::from(
+                source_roots
+                    .values()
+                    .filter(|v| global_prefixes.contains(root_namespace(v))),
+                '.',
+            ),
+            package_matcher: MatcherNode::from(source_roots.keys(), '/'),
+            // reverse, ignoring local
+            import_roots: HashMap::from_iter(source_roots.iter().filter_map(|(k, v)| {
+                if global_prefixes.contains(root_namespace(v)) {
+                    Some((v.clone(), k.clone()))
+                } else {
+                    None
+                }
+            })),
+            source_roots,
             global_prefixes,
             local_prefixes,
             external_prefixes,
             modules_refs: LockedModuleRefCache::new(),
-            to_module_cache: DashMap::new(),
             dir_cache: DashMap::new(),
             global_ns: DashMap::new(),
             unresolved: DashMap::new(),
@@ -56,10 +78,7 @@ impl ModuleGraph {
     }
 
     fn is_local(&self, name: &str) -> Option<bool> {
-        let ns = match name.find('.') {
-            Some(idx) => &name[..idx],
-            None => name,
-        };
+        let ns = root_namespace(name);
         if self.local_prefixes.contains(ns) {
             Some(true)
         } else if self.global_prefixes.contains(ns) {
@@ -156,7 +175,13 @@ impl ModuleGraph {
                 for &d in &imports {
                     let dv = self.modules_refs.get(d);
                     if let Some(dpkg) = dv.pkg {
-                        assert_eq!(dpkg, pkg)
+                        if dpkg != pkg {
+                            // relaxed neighbor check
+                            assert_eq!(
+                                &dpkg[..dpkg.rfind('/').unwrap()],
+                                &pkg[..pkg.rfind('/').unwrap()]
+                            );
+                        }
                     }
                 }
                 self.modules_refs
@@ -168,6 +193,13 @@ impl ModuleGraph {
         for un in unresolved {
             self.unresolved.entry(un).or_default().insert(module_ref);
         }
+        debug!(
+            "parsed imports: {} {} {} {}",
+            filepath,
+            module,
+            module_ref,
+            imports.len()
+        );
         if nspkg && self.global_ns.contains_key(&module_ref) {
             // for the weird, rare case where ns pkg init has some imports, need to merge
             self.global_ns.get_mut(&module_ref).unwrap().extend(imports);
@@ -226,43 +258,45 @@ impl ModuleGraph {
 
     fn to_module_no_cache(
         &self,
-        pkg_path: &str,
         mut dep: Ustr,
-        ref_pkg: Option<Ustr>,
+        fs_candidate: &str,
+        local_fs_root: Option<Ustr>,
     ) -> Option<ModuleRef> {
         // the target of an import statement could be a module, or a value within that module
         // we only want to deal with modules when building an import graph, so we check if a
         // module path resolves to a file, and omit the final component if we can prove it
         // isn't a valid module
+
         if self.import_matcher.strict_prefix(dep.as_str(), '.') {
             // namespace packages FTW
             return Some(self.modules_refs.get_or_create(ustr(""), dep, None));
         }
 
-        let mut depbase = pkg_path.to_string() + "/" + &dep.replace('.', "/");
+        let mut depbase = fs_candidate.to_string();
         for _ in 0..2 {
             let candidate_init = ustr(&(depbase.clone() + "/__init__.py"));
             let candidate_module = ustr(&(depbase.clone() + ".py"));
 
             if let Some(r) = self.modules_refs.ref_for_fs(candidate_init) {
                 let rv = self.modules_refs.get(r);
-                assert_eq!(rv.pkg, ref_pkg);
+                assert_eq!(rv.pkg, local_fs_root);
                 return Some(r);
             } else if let Some(r) = self.modules_refs.ref_for_fs(candidate_module) {
                 let rv = self.modules_refs.get(r);
-                assert_eq!(rv.pkg, ref_pkg);
+                assert_eq!(rv.pkg, local_fs_root);
                 return Some(r);
             } else if self.exists_case_sensitive(depbase.as_str(), "__init__.py") {
                 return Some(
                     self.modules_refs
-                        .get_or_create(candidate_init, dep, ref_pkg),
+                        .get_or_create(candidate_init, dep, local_fs_root),
                 );
             } else if let Some((dir, name)) = candidate_module.rsplit_once('/') {
                 if self.exists_case_sensitive(dir, name) {
-                    return Some(
-                        self.modules_refs
-                            .get_or_create(candidate_module, dep, ref_pkg),
-                    );
+                    return Some(self.modules_refs.get_or_create(
+                        candidate_module,
+                        dep,
+                        local_fs_root,
+                    ));
                 }
             }
 
@@ -270,71 +304,34 @@ impl ModuleGraph {
             // TODO: for correctness we should distinguish between simple import and from import
             // as this fallback is only valid for the latter...
             if let Some(idx) = dep.rfind('.') {
+                depbase = depbase[..depbase.len() - dep.len() + idx].to_string();
                 dep = ustr(&dep[..idx]);
-                depbase = depbase[..pkg_path.len() + 1 + idx].to_string()
             } else {
                 break;
             }
         }
         if let Some(_is_local) = self.is_local(dep.as_str()) {
             // TODO: would be nice to report where from
-            debug!("{} not found", dep);
+            debug!("{} not found around {}", dep, fs_candidate);
         }
         None
     }
 
-    fn to_module_with_cache(
-        &self,
-        pkg_path: &str,
-        dep: Ustr,
-        ref_pkg: Option<Ustr>,
-    ) -> Option<ModuleRef> {
-        // NB: for simplicity, we are not caching local names...
-        if ref_pkg.is_none() {
-            return self.to_module_no_cache(pkg_path, dep, ref_pkg);
-        }
-        match self.to_module_cache.get(&dep) {
-            Some(module) => Some(*module.value()),
-            None => {
-                match self.to_module_no_cache(pkg_path, dep, ref_pkg) {
-                    Some(module_ref) => {
-                        // NB: for simplicity, we are not caching local names...
-                        if ref_pkg.is_none() {
-                            self.to_module_cache.insert(dep, module_ref);
-                        }
-                        Some(module_ref)
-                    }
-                    None => None,
-                }
-            }
-        }
-    }
-
-    fn to_module_local_aware(&self, pkg: &str, dep: Ustr) -> Option<ModuleRef> {
-        match self
-            .packages
-            .get(self.import_matcher.longest_prefix(&dep, '.'))
-        {
-            Some(dep_pkg_fs) => self.to_module_with_cache(dep_pkg_fs, dep, None),
-            None => {
-                if self.is_local(&dep).unwrap_or(false) {
-                    self.to_module_no_cache(pkg, dep, Some(ustr(pkg)))
-                } else {
-                    self.to_module_with_cache(pkg, dep, None)
-                }
-            }
+    fn to_module_local_aware(&self, fs_root: &str, dep: Ustr) -> Option<ModuleRef> {
+        match self.py_to_fs(&dep, fs_root) {
+            Some((fs_cand, local_fs_root)) => self.to_module_no_cache(dep, &fs_cand, local_fs_root),
+            None => None,
         }
     }
 
     fn to_module_list(
         &self,
-        pkg_path: &str,
+        fs_cand: String,
         dep: Ustr,
-        pkg: Option<Ustr>,
+        local_fs_root: Option<Ustr>,
     ) -> Option<Vec<ModuleRef>> {
-        let r = self.to_module_with_cache(pkg_path, dep, pkg);
-        let target_path = pkg_path.to_string() + "/" + &dep.replace('.', "/");
-        match fs::read_dir(&target_path) {
+        let r = self.to_module_no_cache(dep, &fs_cand, local_fs_root);
+        match fs::read_dir(&fs_cand) {
             Err(_) => r.map(|r| vec![r]),
             Ok(entries) => Some(
                 entries
@@ -360,7 +357,11 @@ impl ModuleGraph {
                     })
                     .filter_map(|sub| {
                         let subdep = dep.to_string() + "." + &sub;
-                        self.to_module_with_cache(pkg_path, ustr(&subdep), pkg)
+                        self.to_module_no_cache(
+                            ustr(&subdep),
+                            &(fs_cand.clone() + "/" + &sub),
+                            local_fs_root,
+                        )
                     })
                     .chain(r.map_or(Vec::default(), |r| vec![r]))
                     .collect(),
@@ -369,24 +370,16 @@ impl ModuleGraph {
     }
 
     fn to_module_list_local_aware(&self, pkg: &str, dep: Ustr) -> Option<Vec<ModuleRef>> {
-        match self.is_local(&dep) {
+        match self.py_to_fs(&dep, pkg) {
+            Some((fs_cand, local_fs_root)) => self.to_module_list(fs_cand, dep, local_fs_root),
             None => None,
-            Some(_) => {
-                match self
-                    .packages
-                    .get(self.import_matcher.longest_prefix(&dep, '.'))
-                {
-                    Some(dep_pkg_fs) => self.to_module_list(dep_pkg_fs, dep, None),
-                    None => self.to_module_list(pkg, dep, Some(ustr(pkg))),
-                }
-            }
         }
     }
 
     pub fn parse_parallel(&self) -> Result<(), parser::Error> {
         let parallelism = thread::available_parallelism().unwrap().get();
 
-        let mut package_it = self.packages.values();
+        let mut package_it = self.source_roots.keys();
         let builder = &mut WalkBuilder::new(package_it.next().unwrap());
         for a in package_it {
             builder.add(a);
@@ -400,7 +393,7 @@ impl ModuleGraph {
             prefixes.insert(n.clone());
         });
 
-        let (tx, rx) = mpsc::channel::<crate::parser::Error>();
+        let (tx, rx) = mpsc::channel::<parser::Error>();
 
         // NB: we have to disable handling of .gitignore because
         // some real smart folks have ignore patterns that match
@@ -409,10 +402,6 @@ impl ModuleGraph {
             .standard_filters(false)
             .hidden(true)
             .threads(parallelism)
-            .filter_entry(move |e| {
-                let name = e.file_name().to_str().unwrap();
-                e.depth() > 1 || prefixes.contains(name)
-            })
             .build_parallel()
             .run(|| {
                 let tx = tx.clone();
@@ -440,15 +429,69 @@ impl ModuleGraph {
         res
     }
 
+    /// Map an arbitrary file path to a matching source root, if possible
+    fn fs_to_py<'a>(&self, filepath: &'a str) -> Option<(&'a str, String)> {
+        let fs_root_candidate = self.package_matcher.longest_prefix(filepath, '/');
+        let py_root = self.source_roots.get(fs_root_candidate);
+        py_root?;
+        Some((
+            fs_root_candidate,
+            // TODO: normalize '-' and '.' in module name to '_' ?
+            // NB: would require being able to denormalize in py_to_fs...
+            py_root.unwrap().to_string() + &filepath[fs_root_candidate.len()..].replace('/', "."),
+        ))
+    }
+
+    /// map an arbitrary python import path to a matching source root
+    fn py_to_fs(&self, import_path: &str, fs_root: &str) -> Option<(String, Option<Ustr>)> {
+        match self.is_local(import_path) {
+            None => None,
+            Some(true) => {
+                let py_root = self.source_roots.get(fs_root).unwrap();
+                // local namespace can only be reached from itself or its neighbors
+                if import_path.starts_with(py_root) {
+                    Some((
+                        fs_root.to_string() + &import_path[py_root.len()..].replace('.', "/"),
+                        Some(ustr(fs_root)),
+                    ))
+                } else {
+                    let neighbor = fs_root[..fs_root.len() - py_root.len()].to_string()
+                        + root_namespace(import_path);
+                    if let Some(py_root) = self.source_roots.get(&neighbor) {
+                        let local_fs_root = ustr(&neighbor);
+                        Some((
+                            neighbor + &import_path[py_root.len()..].replace('.', "/"),
+                            Some(local_fs_root),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+            }
+            Some(false) => {
+                let py_root = self.import_matcher.longest_prefix(import_path, '.');
+                self.import_roots.get(py_root).map(|dst_root| {
+                    (
+                        dst_root.to_string() + &import_path[py_root.len()..].replace('.', "/"),
+                        None,
+                    )
+                })
+            }
+        }
+    }
+
     fn parse_one_file(&self, e: DirEntry, tx: &mpsc::Sender<parser::Error>) -> WalkState {
         let filename = e.file_name().to_str().unwrap();
-        debug!("parse: {}", filename);
         if !filename.ends_with(".py") {
             return WalkState::Continue;
         }
+        debug!("parse: {}", filename);
         let filepath = e.path().to_str().unwrap();
-        // assume depth 0 (root of subtree being walked) is package root
-        let (pkg, module) = split_at_depth(filepath, '/', e.depth());
+        let res = self.fs_to_py(filepath);
+        if res.is_none() {
+            return WalkState::Continue;
+        }
+        let (pkg, module) = res.unwrap();
 
         // remove .py suffix, turn / into .
         // NB: preserve __init__ for correct relative import resolution
@@ -491,8 +534,8 @@ impl ModuleGraph {
     }
 
     pub fn finalize(self) -> TransitiveClosure {
-        let module_refs = self.modules_refs.take();
-        reify_deps(&self.global_ns, &module_refs);
+        let mut module_refs = self.modules_refs.take();
+        reify_deps(&self.global_ns, &mut module_refs);
         let mut unresolved = HashMap::with_capacity(self.unresolved.len());
         for (k, v) in self.unresolved {
             unresolved.insert(k, v);
@@ -501,30 +544,41 @@ impl ModuleGraph {
     }
 }
 
-fn reify_deps(g: &DashMap<ModuleRef, HashSet<ModuleRef>>, ref_cache: &ModuleRefCache) {
+fn reify_deps(g: &DashMap<ModuleRef, HashSet<ModuleRef>>, ref_cache: &mut ModuleRefCache) {
     // because of the way python import machinery works, namely executing top-level
     // statements in a module body, and the existence of __init__.py:
     //
     //  - import x.y.x implies a dep on x and x.y, not just x.y.z
     //
     // NB: this must happen after the whole graph is constructed to work correctly
+    // NB: we construct missing namespace packages if needed
 
     ref_cache.validate();
 
-    for n in 0..ref_cache.max_value() {
-        if let Some(mut deps) = g.get_mut(&n) {
-            // add dep on all parent __init__.py
-            let module = ref_cache.get(n);
-            let mut idx = module.py.rfind('.');
-            while idx.is_some() {
-                let parent = ustr(&module.py[..idx.unwrap()]);
-                if let Some(pref) = ref_cache.ref_for_py(parent, module.pkg) {
-                    let pmod = ref_cache.get(pref);
-                    assert_eq!(pmod.pkg, module.pkg);
-                    deps.insert(pref);
+    let mut n: ModuleRef = 0;
+    while n < ref_cache.max_value() {
+        let mut deps = g.entry(n).or_default();
+        // add dep on all parent __init__.py
+        let module = ref_cache.get(n);
+        let mut idx = module.py.rfind('.');
+        while idx.is_some() {
+            let parent = ustr(&module.py[..idx.unwrap()]);
+            if let Some(pref) = match ref_cache.ref_for_py(parent, module.pkg) {
+                Some(pref) => Some(pref),
+                None => {
+                    if module.pkg.is_none() {
+                        Some(ref_cache.get_or_create(ustr(""), parent, None))
+                    } else {
+                        None
+                    }
                 }
-                idx = parent.rfind('.');
+            } {
+                let pmod = ref_cache.get(pref);
+                assert_eq!(pmod.pkg, module.pkg);
+                deps.insert(pref);
             }
+            idx = parent.rfind('.');
         }
+        n += 1;
     }
 }

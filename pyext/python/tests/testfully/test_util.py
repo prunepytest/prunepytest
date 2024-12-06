@@ -72,11 +72,12 @@ def test_hook_zeroconf() -> None:
 
     assert hook.global_namespaces() == {"testfully"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
-    assert hook.package_map() == {
-        "testfully": os.path.join("src", "testfully"),
-        "ns.ns2.normal": os.path.join("test-data", "ns", "ns2", "normal"),
+    assert hook.source_roots() == {
+        os.path.join("src", "testfully"): "testfully",
+        "tests": "tests",
+        os.path.join("test-data", "ns", "ns2", "normal"): "ns.ns2.normal",
         **{
-            pkg: os.path.join("test-data", pkg)
+            os.path.join("test-data", pkg): pkg
             for pkg in expected_test_data_pkg
             if pkg != "ns"
         },
@@ -88,11 +89,12 @@ def test_hook_zeroconf() -> None:
 
     assert hook.global_namespaces() == {"testfully"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
-    assert hook.package_map() == {
-        "testfully": os.path.join("python", "src", "testfully"),
-        "ns.ns2.normal": os.path.join("python", "test-data", "ns", "ns2", "normal"),
+    assert hook.source_roots() == {
+        os.path.join("python", "src", "testfully"): "testfully",
+        os.path.join("python", "tests"): "tests",
+        os.path.join("python", "test-data", "ns", "ns2", "normal"): "ns.ns2.normal",
         **{
-            pkg: os.path.join("python", "test-data", pkg)
+            os.path.join("python", "test-data", pkg): pkg
             for pkg in expected_test_data_pkg
             if pkg != "ns"
         },

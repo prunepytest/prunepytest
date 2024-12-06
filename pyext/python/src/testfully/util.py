@@ -50,7 +50,7 @@ def load_import_graph(hook: BaseHook, file: Optional[str]) -> ModuleGraph:
     else:
         print_with_timestamp("--- building fresh import graph")
         g = ModuleGraph(
-            hook.package_map(),
+            hook.source_roots(),
             hook.global_namespaces(),  # unified namespace
             hook.local_namespaces(),  # per-pkg namespace
             hook.external_imports() | {"importlib", "__import__"},
@@ -125,21 +125,23 @@ def hook_zeroconf(
 
     global_ns = set()
     local_ns = set()
-    pkg_map = {}
+    source_roots = {}
     test_folders = {}
 
     for pkgroot in pkg_roots:
         if pkgroot.name == "tests":
             local_ns.add(pkgroot.name)
             test_folders[str(pkgroot.parent.relative_to(root))] = "tests"
+            source_roots[str(pkgroot.relative_to(root))] = "tests"
             continue
 
         fs_path, py_path = infer_ns_pkg(pkgroot)
 
         global_ns.add(py_path.partition(".")[0])
-        pkg_map[py_path] = str(fs_path.relative_to(root))
+        source_roots[str(fs_path.relative_to(root))] = py_path
 
-    return cls(global_ns, local_ns, pkg_map, test_folders)
+    print(f"zeroconf: {global_ns}, {local_ns}, {source_roots}, {test_folders}")
+    return cls(global_ns, local_ns, source_roots, test_folders)
 
 
 # NB: base_cls can be abstract, ignore mypy warnings at call site...

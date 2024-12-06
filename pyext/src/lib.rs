@@ -38,13 +38,13 @@ pub struct ModuleGraph {
 #[pymethods]
 impl ModuleGraph {
     #[new]
-    #[pyo3(signature = (packages, global_prefixes, local_prefixes,
+    #[pyo3(signature = (source_roots, global_prefixes, local_prefixes,
                         external_prefixes=HashSet::default(),
                         dynamic_deps=HashMap::default(),
     ))]
     fn new(
         py: Python<'_>,
-        packages: HashMap<String, String>,
+        source_roots: HashMap<String, String>,
         global_prefixes: HashSet<String>,
         local_prefixes: HashSet<String>,
         external_prefixes: HashSet<String>,
@@ -53,7 +53,7 @@ impl ModuleGraph {
         let tc = py
             .allow_threads(|| {
                 let g = graph::ModuleGraph::new(
-                    packages,
+                    source_roots,
                     global_prefixes,
                     local_prefixes,
                     external_prefixes,

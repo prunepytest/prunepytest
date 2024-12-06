@@ -19,7 +19,7 @@ class BaseHook(ABC):
     def local_namespaces(self) -> AbstractSet[str]: ...
 
     @abstractmethod
-    def package_map(self) -> Mapping[str, str]: ...
+    def source_roots(self) -> Mapping[str, str]: ...
 
     def external_imports(self) -> AbstractSet[str]:
         return frozenset()
@@ -101,18 +101,18 @@ class ValidatorHook(PluginHook, ValidatorMixin, metaclass=ABCMeta):
 
 
 class ZeroConfHook(ValidatorHook):
-    __slots__ = ("global_ns", "local_ns", "pkg_map", "tst_dirs")
+    __slots__ = ("global_ns", "local_ns", "src_roots", "tst_dirs")
 
     def __init__(
         self,
         global_ns: AbstractSet[str],
         local_ns: AbstractSet[str],
-        pkg_map: Mapping[str, str],
+        src_roots: Mapping[str, str],
         tst_dirs: Mapping[str, str],
     ):
         self.local_ns = local_ns
         self.global_ns = global_ns
-        self.pkg_map = pkg_map
+        self.src_roots = src_roots
         self.tst_dirs = tst_dirs
 
     def global_namespaces(self) -> AbstractSet[str]:
@@ -121,8 +121,8 @@ class ZeroConfHook(ValidatorHook):
     def local_namespaces(self) -> AbstractSet[str]:
         return self.local_ns
 
-    def package_map(self) -> Mapping[str, str]:
-        return self.pkg_map
+    def source_roots(self) -> Mapping[str, str]:
+        return self.src_roots
 
     def test_folders(self) -> Mapping[str, str]:
         return self.tst_dirs
