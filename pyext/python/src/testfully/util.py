@@ -3,7 +3,8 @@ import os
 import pathlib
 import sys
 import time
-from typing import cast, Any, Optional, Set, Tuple, Type, TypeVar
+from fnmatch import fnmatch
+from typing import cast, Any, Optional, Set, Tuple, Type, TypeVar, Dict
 
 from . import ModuleGraph
 from .api import ZeroConfHook, BaseHook
@@ -89,13 +90,22 @@ def find_package_roots(root: pathlib.PurePath) -> Set[pathlib.PurePath]:
     return pkgs
 
 
-def infer_ns_pkg(pkgroot: pathlib.PurePath) -> Tuple[pathlib.PurePath, str]:
+def infer_py_pkg(filepath: str) -> str:
+    parent = os.path.dirname(filepath)
+    while parent and os.path.exists(os.path.join(parent, "__init__.py")):
+        parent = os.path.dirname(parent)
+    return filepath[len(parent) + 1 if parent else 0 :].replace("/", ".")
+
+
+def infer_ns_pkg(
+    pkgroot: pathlib.PurePath, root: Optional[pathlib.PurePath] = None
+) -> Tuple[pathlib.PurePath, str]:
     # walk down until first __init__.py without recognizable ns extend stanza
 
     from testfully import file_looks_like_pkgutil_ns_init
 
     ns = pkgroot.name
-    first_non_ns = pkgroot
+    first_non_ns = root / pkgroot if root else pkgroot
     while file_looks_like_pkgutil_ns_init(str(first_non_ns / "__init__.py")):
         with os.scandir(first_non_ns) as it:
             sub = [
@@ -111,7 +121,44 @@ def infer_ns_pkg(pkgroot: pathlib.PurePath) -> Tuple[pathlib.PurePath, str]:
         else:
             # bail if we don't have a clean match
             return pkgroot, pkgroot.name
-    return first_non_ns, ns
+    return first_non_ns.relative_to(root) if root else first_non_ns, ns
+
+
+def parse_toml(filepath: str) -> Dict[str, Any]:
+    try:
+        # available on py 3.11+
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib  # type: ignore[import-not-found, no-redef]
+        except ImportError:
+            return {}
+
+    with open(filepath, "rb") as f:
+        return tomllib.load(f)
+
+
+def toml_xtract(cfg: Dict[str, Any], cfg_path: str) -> Any:
+    head, _, tail = cfg_path.partition(".")
+    if head not in cfg:
+        return None
+    if tail:
+        return toml_xtract(cfg[head], tail)
+    return cfg[head]
+
+
+def filter_packages(
+    pkg_roots: Set[pathlib.PurePath], pyproject: Dict[str, Any]
+) -> Set[pathlib.PurePath]:
+    # TODO: support poetry/hatch/maturin/...?
+    filtered = pkg_roots
+
+    f = toml_xtract(pyproject, "tool.setuptools.packages.find.include")
+    if f:
+        print(f"filter pkg roots according to setuptools config: {f}")
+        filtered = {p for p in filtered if any(fnmatch(str(p), pat) for pat in f)}
+
+    return filtered
 
 
 def hook_zeroconf(
@@ -121,7 +168,14 @@ def hook_zeroconf(
     """
     Try to infer global and local namespaces, for sane zero-conf behavior
     """
-    pkg_roots = find_package_roots(root)
+    # make paths relative to root for easier manipulation
+    pkg_roots = {r.relative_to(root) for r in find_package_roots(root)}
+
+    pyproj_path = str(root / "pyproject.toml")
+    pyproj = parse_toml(pyproj_path) if os.path.exists(pyproj_path) else {}
+
+    if pyproj:
+        pkg_roots = filter_packages(pkg_roots, pyproj)
 
     global_ns = set()
     local_ns = set()
@@ -131,17 +185,29 @@ def hook_zeroconf(
     for pkgroot in pkg_roots:
         if pkgroot.name == "tests":
             local_ns.add(pkgroot.name)
-            test_folders[str(pkgroot.parent.relative_to(root))] = "tests"
-            source_roots[str(pkgroot.relative_to(root))] = "tests"
+            test_folders[str(pkgroot)] = "tests"
+            source_roots[str(pkgroot)] = "tests"
             continue
 
-        fs_path, py_path = infer_ns_pkg(pkgroot)
+        fs_path, py_path = infer_ns_pkg(pkgroot, root)
 
         global_ns.add(py_path.partition(".")[0])
-        source_roots[str(fs_path.relative_to(root))] = py_path
+        source_roots[str(fs_path)] = py_path
 
-    print(f"zeroconf: {global_ns}, {local_ns}, {source_roots}, {test_folders}")
-    return cls(global_ns, local_ns, source_roots, test_folders)
+    # TODO: also check pytest.ini
+    tst_paths = toml_xtract(pyproj, "tool.pytest.ini_options.testpaths")
+    if tst_paths:
+        print(f"use testpaths from pyproject.toml: {tst_paths}")
+        # TODO: ensure that those are included in source roots
+        # TODO: merge instead of overriding?
+        test_folders = {p: infer_py_pkg(p) for p in tst_paths}
+
+    tst_file_pattern = toml_xtract(pyproj, "tool.pytest.ini_options.python_files")
+
+    print(
+        f"zeroconf: {global_ns}, {local_ns}, {source_roots}, {test_folders}, {tst_file_pattern}"
+    )
+    return cls(global_ns, local_ns, source_roots, test_folders, tst_file_pattern)
 
 
 # NB: base_cls can be abstract, ignore mypy warnings at call site...
