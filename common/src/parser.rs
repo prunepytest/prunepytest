@@ -5,8 +5,8 @@ use ruff_python_parser::{parse_module, ParseError};
 use ruff_text_size::Ranged;
 use std::fmt::Display;
 use std::fs::read_to_string;
-use std::io;
 use std::sync::LazyLock;
+use std::{fs, io};
 
 #[derive(Debug)]
 pub enum Error {
@@ -142,6 +142,7 @@ pub fn content_looks_like_pkgutil_ns_init(source: &str) -> bool {
 
 pub fn file_looks_like_pkgutil_ns_init(filepath: &str) -> Result<bool, Error> {
     Ok(filepath.ends_with("__init__.py")
+        && fs::exists(filepath).unwrap_or(false)
         && content_looks_like_pkgutil_ns_init(&read_to_string(filepath).map_err(Error::IO)?))
 }
 
