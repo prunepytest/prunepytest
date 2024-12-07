@@ -26,7 +26,7 @@ class Git(VCS):
                 .decode("utf-8")
                 .rstrip()
             )
-            > 0
+            == 0
         )
 
     def commit_id(self) -> str:
