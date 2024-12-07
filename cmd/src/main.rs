@@ -91,11 +91,8 @@ fn main() {
             i += 1;
             let affected = g.as_ref().unwrap().affected_by_files(&args[i..i + 1]);
             eprintln!("affected by {}:", &args[i]);
-            for (pkg, files) in &affected {
-                eprintln!("  - {}:", pkg);
-                for f in files {
-                    eprintln!("      - {}", f);
-                }
+            for file in &affected {
+                eprintln!("      - {}", file);
             }
         } else if &args[i] == "--depends" {
             i += 1;

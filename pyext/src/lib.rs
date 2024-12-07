@@ -141,7 +141,7 @@ impl ModuleGraph {
         &self,
         py: Python<'py>,
         files: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, PyDict>> {
+    ) -> PyResult<Bound<'py, PySet>> {
         affected_by(py, files, |l| self.tc.affected_by_files(l))
     }
 
@@ -150,12 +150,49 @@ impl ModuleGraph {
         &self,
         py: Python<'py>,
         modules: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, PyDict>> {
+    ) -> PyResult<Bound<'py, PySet>> {
         affected_by(py, modules, |l| self.tc.affected_by_modules(l))
+    }
+
+    #[pyo3(signature = (files))]
+    fn local_affected_by_files<'py>(
+        &self,
+        py: Python<'py>,
+        files: Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        local_affected_by(py, files, |l| self.tc.local_affected_by_files(l))
+    }
+
+    #[pyo3(signature = (modules))]
+    fn local_affected_by_modules<'py>(
+        &self,
+        py: Python<'py>,
+        modules: Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        local_affected_by(py, modules, |l| self.tc.local_affected_by_modules(l))
     }
 }
 
-fn affected_by<'py, F>(py: Python<'py>, l: Bound<'py, PyAny>, f: F) -> PyResult<Bound<'py, PyDict>>
+fn affected_by<'py, F>(py: Python<'py>, l: Bound<'py, PyAny>, f: F) -> PyResult<Bound<'py, PySet>>
+where
+    F: Ungil + Send + FnOnce(Vec<String>) -> UstrSet,
+{
+    let modules: Vec<String> = to_vec(l)?;
+    let affected = py.allow_threads(|| f(modules));
+
+    let r = PySet::empty(py)?;
+    for file in &affected {
+        r.add(PyString::new(py, file))?
+    }
+
+    Ok(r)
+}
+
+fn local_affected_by<'py, F>(
+    py: Python<'py>,
+    l: Bound<'py, PyAny>,
+    f: F,
+) -> PyResult<Bound<'py, PyDict>>
 where
     F: Ungil + Send + FnOnce(Vec<String>) -> HashMap<Ustr, UstrSet>,
 {

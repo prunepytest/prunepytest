@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io;
 use std::io::Write;
-use std::ops::Sub;
+use std::ops::{ControlFlow, Sub};
 use ustr::{ustr, Ustr, UstrSet};
 
 type CondensedRef = usize;
@@ -227,29 +227,88 @@ impl TransitiveClosure {
     pub fn affected_by_modules<T: AsRef<str>, L: IntoIterator<Item = T>>(
         &self,
         modules: L,
-    ) -> HashMap<Ustr, UstrSet> {
-        self.affected_by(
-            modules,
-            |m| self.module_refs.ref_for_py(ustr(m), None),
+    ) -> UstrSet {
+        self.as_concrete(
+            self.affected_by(modules, |m| self.module_refs.ref_for_py(ustr(m), None)),
             |rv| rv.py,
         )
     }
 
-    pub fn affected_by_files<T: AsRef<str>, L: IntoIterator<Item = T>>(
+    pub fn affected_by_files<T: AsRef<str>, L: IntoIterator<Item = T>>(&self, files: L) -> UstrSet {
+        self.as_concrete(
+            self.affected_by(files, |m| self.module_refs.ref_for_fs(ustr(m))),
+            |rv| rv.fs,
+        )
+    }
+
+    pub fn local_affected_by_modules<T: AsRef<str>, L: IntoIterator<Item = T>>(
+        &self,
+        modules: L,
+    ) -> HashMap<Ustr, UstrSet> {
+        self.as_concrete_pkg_grouped(
+            self.affected_by(modules, |m| self.module_refs.ref_for_py(ustr(m), None)),
+            |rv| rv.py,
+        )
+    }
+
+    pub fn local_affected_by_files<T: AsRef<str>, L: IntoIterator<Item = T>>(
         &self,
         files: L,
     ) -> HashMap<Ustr, UstrSet> {
-        self.affected_by(files, |m| self.module_refs.ref_for_fs(ustr(m)), |rv| rv.fs)
+        self.as_concrete_pkg_grouped(
+            self.affected_by(files, |m| self.module_refs.ref_for_fs(ustr(m))),
+            |rv| rv.fs,
+        )
     }
 
-    fn affected_by<T, L, Fin, Fout>(&self, l: L, f_in: Fin, f_out: Fout) -> HashMap<Ustr, UstrSet>
+    fn as_concrete<Fout>(&self, all_sccs: CondensedEdges, f_out: Fout) -> UstrSet
+    where
+        Fout: Fn(&ModuleRefVal) -> Ustr,
+    {
+        let mut affected: UstrSet = UstrSet::default();
+        all_sccs.iter().traverse(|c| {
+            for &v in &self.condensed_to_mod[c] {
+                let rv = self.module_refs.get(v);
+                affected.insert(f_out(&rv));
+            }
+            ControlFlow::Continue(())
+        });
+        affected
+    }
+
+    fn as_concrete_pkg_grouped<Fout>(
+        &self,
+        all_sccs: CondensedEdges,
+        f_out: Fout,
+    ) -> HashMap<Ustr, UstrSet>
+    where
+        Fout: Fn(&ModuleRefVal) -> Ustr,
+    {
+        let mut grouped_by_pkg: HashMap<Ustr, UstrSet> = HashMap::new();
+
+        all_sccs.iter().traverse(|c| {
+            for &v in &self.condensed_to_mod[c] {
+                let rv = self.module_refs.get(v);
+                // NB: filter out non-test
+                if rv.pkg.is_some() {
+                    grouped_by_pkg
+                        .entry(rv.pkg.unwrap())
+                        .or_default()
+                        .insert(f_out(&rv));
+                }
+            }
+            ControlFlow::Continue(())
+        });
+        grouped_by_pkg
+    }
+
+    fn affected_by<T, L, Fin>(&self, l: L, f_in: Fin) -> CondensedEdges
     where
         T: AsRef<str>,
         L: IntoIterator<Item = T>,
         Fin: Fn(&str) -> Option<ModuleRef>,
-        Fout: Fn(&ModuleRefVal) -> Ustr,
     {
-        let mut all_sccs: HashSet<CondensedRef> = HashSet::new();
+        let mut all_sccs: CondensedEdges = CondensedEdges::new();
         for module in l {
             let module = module.as_ref();
             match f_in(module) {
@@ -267,27 +326,16 @@ impl TransitiveClosure {
                         }
                         Some(scc) => {
                             // eprintln!("{} tests affected by: {}", modified_file, scc.len());
-                            all_sccs.extend(scc);
+                            scc.iter().traverse(|e| {
+                                all_sccs.insert(e);
+                                ControlFlow::Continue(())
+                            });
                         }
                     }
                 }
             }
         }
-
-        let mut grouped_by_pkg: HashMap<Ustr, UstrSet> = HashMap::new();
-        for c in all_sccs {
-            for &v in &self.condensed_to_mod[c] {
-                let rv = self.module_refs.get(v);
-                // NB: filter out non-test
-                if rv.pkg.is_some() {
-                    grouped_by_pkg
-                        .entry(rv.pkg.unwrap())
-                        .or_default()
-                        .insert(f_out(&rv));
-                }
-            }
-        }
-        grouped_by_pkg
+        all_sccs
     }
 }
 
