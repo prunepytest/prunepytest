@@ -8,6 +8,7 @@ from functools import wraps
 
 from typing import (
     Any,
+    Callable,
     Dict,
     Iterable,
     List,
@@ -97,6 +98,7 @@ class Tracker:
         "log_file",
         "prefixes",
         "patches",
+        "import_callback",
     )
 
     def __init__(self) -> None:
@@ -122,6 +124,8 @@ class Tracker:
         self.log_file: Union[None, io.IOBase] = None
         self.prefixes: AbstractSet[str] = set()
         self.patches: Optional[Mapping[str, Any]] = None
+        # for use by pytest plugin
+        self.import_callback: Optional[Callable[[str], None]] = None
 
     def start_tracking(
         self,
@@ -249,6 +253,8 @@ class Tracker:
                         # argument, and want those calls to be caught in dynamic aggregation/ignores
                         # let's document this limitation for now and we can revisit if we ever want to
                         # support this particular edge case, which seems pretty unlikely...
+                        if self.import_callback:
+                            self.import_callback(canonical)
                         self.cxt.add(canonical)
                         if canonical in self.tracked:
                             self.cxt.update(self.tracked[canonical])
@@ -282,7 +288,9 @@ class Tracker:
         print("dynamic imports:", self.dynamic_imports, file=f)
         print("dynamic users:", self.dynamic_users, file=f)
 
-    def enter_context(self, cxt: str) -> None:
+    def enter_context(
+        self, cxt: str, cb: Optional[Callable[[str], None]] = None
+    ) -> None:
         assert cxt not in self.stack
         # assert cxt not in self.tracked
         self.stack.append(cxt)
@@ -290,8 +298,10 @@ class Tracker:
             deps: Set[str] = set()
             self.tracked[cxt] = deps
         self.cxt = self.tracked[cxt]
+        self.import_callback = cb
 
     def exit_context(self, expected: str) -> None:
+        self.import_callback = None
         actual = self.stack.pop()
         assert actual == expected
         down = self.tracked[self.stack[-1]]
@@ -309,6 +319,8 @@ class Tracker:
     def _find_and_load_helper(self, name: str, import_: Any, is_ignored: bool) -> Any:
         new_context = False
         if not is_ignored:
+            if self.import_callback:
+                self.import_callback(name)
             self.cxt.add(name)
             if self.log_file:
                 flag = (

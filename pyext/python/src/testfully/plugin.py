@@ -2,7 +2,7 @@
 pytest plugin
 """
 
-from warnings import WarningMessage
+import warnings
 
 import pathlib
 import pytest
@@ -10,9 +10,11 @@ import subprocess
 
 from typing import Any, AbstractSet, Optional, List
 
+from _pytest._code import Traceback
 from _pytest.config import ExitCode
 from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
+from testfully.tracker import IGNORED_FRAMES
 from typing_extensions import Generator
 
 from . import ModuleGraph
@@ -27,6 +29,11 @@ try:
     from xdist import is_xdist_controller, is_xdist_worker  # type: ignore[import-not-found]
 except ImportError:
     is_xdist_controller = is_xdist_worker = lambda session: False
+
+
+class UnexpectedImportException(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
 
 
 def raise_(e: BaseException) -> None:
@@ -46,28 +53,28 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     )
 
     group.addoption(
-        "--testfully-noselect",
+        "--tf-noselect",
         action="store_true",
         dest="testfully_noselect",
         help=("Keep default test selection, instead of pruning irrelevant tests"),
     )
 
     group.addoption(
-        "--testfully-novalidate",
+        "--tf-novalidate",
         action="store_true",
         dest="testfully_novalidate",
         help=("Skip validation of dynamic imports"),
     )
 
     group.addoption(
-        "--testfully-warnonly",
+        "--tf-warnonly",
         action="store_true",
         dest="testfully_warnonly",
         help=("Only warn instead of failing upon unexpected imports"),
     )
 
     group.addoption(
-        "--testfully-hook",
+        "--tf-hook",
         action="store",
         type=str,
         dest="testfully_hook",
@@ -75,7 +82,7 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     )
 
     group.addoption(
-        "--testfully-graph-root",
+        "--tf-graph-root",
         action="store",
         type=str,
         dest="testfully_graph_root",
@@ -83,7 +90,7 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     )
 
     group.addoption(
-        "--testfully-graph",
+        "--tf-graph",
         action="store",
         type=str,
         dest="testfully_graph",
@@ -212,6 +219,33 @@ class TestfullyValidate:
 
         return (yield)
 
+    @pytest.hookimpl()  # type: ignore
+    def pytest_runtest_makereport(
+        self, item: pytest.Item, call: pytest.CallInfo[None]
+    ) -> pytest.TestReport:
+        # clean up the traceback for our custom validation exception
+        if call.excinfo and call.excinfo.type is UnexpectedImportException:
+            tb = call.excinfo.traceback
+            i = 0
+            # remove the tail of the traceback, starting at the first frame that lands
+            # in the tracker, or importlib
+            while (
+                i + 1 < len(tb)
+                and tb[i + 1]._rawentry.tb_frame.f_code.co_filename
+                not in IGNORED_FRAMES
+            ):
+                i += 1
+            # to properly remove the top of the stack, we need to both
+            #  1. shrink the high-level vector
+            #  2. sever the link in the underlying low-level linked list of stack frames
+            if i < len(tb):
+                tb[i]._rawentry.tb_next = None
+                call.excinfo.traceback = Traceback(tb[: i + 1])
+
+        # NB: must clean up traceback before creating the report, or it'll keep the old stack trace
+        out = TestReport.from_item_and_call(item, call)
+        return out
+
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
     def pytest_runtest_protocol(
         self, item: pytest.Item, nextitem: pytest.Item
@@ -226,17 +260,27 @@ class TestfullyValidate:
         graph_path = str(self.rel_root / f) if self.rel_root else f
         import_path = f[:-3].replace("/", ".")
 
-        # TODO: add some sort of callback to catch and flag new imports directly in Tracker
-        # this would allow including the relevant stack trace in the error
-        self.tracker.enter_context(import_path)
+        def import_callback(name: str) -> None:
+            if self.expected_imports and name not in self.expected_imports:
+                if item.session.config.option.testfully_warnonly:
+                    # TODO: stack?
+                    warnings.warn(f"unexpected import {name}")
+                else:
+                    raise UnexpectedImportException(f"unexpected import {name}")
+
+        # NB: we're registering an import callback so we can immediately fail the
+        # test with a clear traceback on the first unexpected import
+        self.tracker.enter_context(import_path, import_callback)
 
         before = self.tracker.with_dynamic(import_path)
 
         if graph_path != self.current_file:
             self.current_file = graph_path
-            self.expected_imports = self.graph.file_depends_on(graph_path)
+            self.expected_imports = self.graph.file_depends_on(graph_path) or set()
 
-            # baseline for first test item in this file
+            # sanity check: make sure the import graph covers everything that was
+            # imported when loading the test file.
+            # We only do that for the first test item in each file
             # NB: might be triggered multiple times with xdist, and that's OK
             unexpected = before - self.expected_imports
             if unexpected:
@@ -250,8 +294,8 @@ class TestfullyValidate:
 
         after = self.tracker.with_dynamic(import_path)
 
+        # sanity check: did we track any imports that somehow bypassed the callback?
         caused_by_test = after - before
-
         unexpected = caused_by_test - expected
         if unexpected:
             _report_unexpected(item, unexpected)
@@ -259,12 +303,12 @@ class TestfullyValidate:
         return outcome
 
 
-def _report_unexpected(item, unexpected):
+def _report_unexpected(item: pytest.Item, unexpected: AbstractSet[str]) -> None:
     if item.session.config.option.testfully_warnonly:
         f = item.location[0]
         item.session.ihook.pytest_warning_recorded.call_historic(
             kwargs=dict(
-                warning_message=WarningMessage(
+                warning_message=warnings.WarningMessage(
                     f"{len(unexpected)} unexpected imports: {unexpected}",
                     Warning,
                     f,
