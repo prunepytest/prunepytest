@@ -1,4 +1,3 @@
-import contextlib
 import os.path
 import tempfile
 
@@ -6,13 +5,13 @@ import pytest
 
 from testfully.validator import validate
 
-from .conftest import TEST_DATA
+from .conftest import TEST_DATA, chdir
 
 
 def test_validator_zeroconf_from_pyext_python() -> None:
     python_dir = TEST_DATA.parent
 
-    with contextlib.chdir(python_dir):
+    with chdir(python_dir):
         n_err, n_missing = validate(None)
 
         assert n_err == 0
@@ -22,7 +21,7 @@ def test_validator_zeroconf_from_pyext_python() -> None:
 def test_validator_zeroconf_from_pyext() -> None:
     pyext_dir = TEST_DATA.parent.parent
 
-    with contextlib.chdir(pyext_dir):
+    with chdir(pyext_dir):
         n_err, n_missing = validate(None)
 
         assert n_err == 0
@@ -32,7 +31,7 @@ def test_validator_zeroconf_from_pyext() -> None:
 def test_validator_zeroconf_from_repo_root() -> None:
     root_dir = TEST_DATA.parent.parent.parent
 
-    with contextlib.chdir(root_dir):
+    with chdir(root_dir):
         n_err, n_missing = validate(None)
 
         assert n_err == 0
@@ -42,7 +41,7 @@ def test_validator_zeroconf_from_repo_root() -> None:
 def test_validator_zeroconf_with_graph() -> None:
     python_dir = TEST_DATA.parent
 
-    with contextlib.chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
+    with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
         graph_path = os.path.join(tmpdir, "graph.bin")
         n_err, n_missing = validate(None, graph_path)
 
@@ -72,7 +71,7 @@ class TestHook(ZeroConfHook):
 def test_validator_with_custom_zeroconf_hook() -> None:
     python_dir = TEST_DATA.parent
 
-    with contextlib.chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
+    with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
         hook_path = os.path.join(tmpdir, "hook.py")
         with open(hook_path, "w") as f:
             f.write(ZEROCONF_HOOK_PY)
@@ -103,7 +102,7 @@ class TestHook(ValidatorHook):
 def test_validator_with_custom_hook() -> None:
     python_dir = TEST_DATA.parent
 
-    with contextlib.chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
+    with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
         hook_path = os.path.join(tmpdir, "hook.py")
         with open(hook_path, "w") as f:
             f.write(HOOK_PY)
@@ -125,7 +124,7 @@ class StillAbstract(ValidatorHook):
 def test_validator_invalid_hook() -> None:
     python_dir = TEST_DATA.parent
 
-    with contextlib.chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
+    with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
         hook_path = os.path.join(tmpdir, "hook.py")
         with open(hook_path, "w") as f:
             f.write(INVALID_HOOK_PY)
@@ -143,7 +142,7 @@ from testfully.api import ValidatorHook
 def test_validator_missing_hook() -> None:
     python_dir = TEST_DATA.parent
 
-    with contextlib.chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
+    with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
         hook_path = os.path.join(tmpdir, "hook.py")
         with open(hook_path, "w") as f:
             f.write(MISSING_HOOK_PY)
