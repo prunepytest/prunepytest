@@ -5,7 +5,7 @@ use crate::parser::raw_get_all_imports;
 use crate::transitive_closure::TransitiveClosure;
 use dashmap::{DashMap, Entry};
 use ignore::{DirEntry, WalkBuilder, WalkState};
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 use std::{fs, thread};
@@ -154,6 +154,7 @@ impl ModuleGraph {
                 // so record that, to reduce noise from many function/classes from a single
                 // unresolved module
                 if let Some(idx) = dep.rfind('.') {
+                    info!("unresolved: {} {} {}", filepath, dep, &dep[..idx]);
                     unresolved.insert(ustr(&dep[..idx]));
                 }
             }
@@ -318,6 +319,10 @@ impl ModuleGraph {
     }
 
     fn to_module_local_aware(&self, fs_root: &str, dep: Ustr) -> Option<ModuleRef> {
+        if self.import_matcher.strict_prefix(dep.as_str(), '.') {
+            // namespace packages FTW
+            return Some(self.modules_refs.get_or_create(ustr(""), dep, None));
+        }
         match self.py_to_fs(&dep, fs_root) {
             Some((fs_cand, local_fs_root)) => self.to_module_no_cache(dep, &fs_cand, local_fs_root),
             None => None,
