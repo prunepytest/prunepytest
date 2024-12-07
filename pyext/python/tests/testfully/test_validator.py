@@ -96,7 +96,7 @@ class TestHook(ValidatorHook):
         return {"src/testfully": "testfully", "tests": "tests"}
 
     def test_folders(self):
-        return {".": "tests"}
+        return {"tests": "tests"}
 """
 
 

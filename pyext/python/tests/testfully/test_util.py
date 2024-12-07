@@ -82,7 +82,7 @@ def test_hook_zeroconf() -> None:
             if pkg != "ns"
         },
     }
-    assert hook.test_folders() == {".": "tests"}
+    assert hook.test_folders() == {"tests": "tests"}
 
     pyext_dir = python_dir.parent
     hook = hook_zeroconf(pyext_dir)
@@ -99,4 +99,4 @@ def test_hook_zeroconf() -> None:
             if pkg != "ns"
         },
     }
-    assert hook.test_folders() == {"python": "tests"}
+    assert hook.test_folders() == {"python/tests": "tests"}

@@ -35,13 +35,6 @@ def import_file(name: str, filepath: str) -> Any:
     return mod
 
 
-def is_test_file(name: str) -> bool:
-    # https://docs.pytest.org/en/latest/explanation/goodpractices.html#test-discovery
-    return (name.startswith("test_") and name.endswith(".py")) or name.endswith(
-        "_test.py"
-    )
-
-
 def load_import_graph(hook: BaseHook, file: Optional[str]) -> ModuleGraph:
     # TODO: we could move most of this into a separate thread
     # load graph from file if provided, otherwise parse the repo

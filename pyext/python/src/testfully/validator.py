@@ -53,7 +53,6 @@ from .tracker import Tracker, print_clean_traceback
 from .util import (
     print_with_timestamp,
     load_import_graph,
-    is_test_file,
     load_hook,
     hook_zeroconf,
 )
@@ -99,7 +98,7 @@ def recursive_import_tests(
                 imported |= recursive_import_tests(
                     e.path, import_prefix + "." + e.name, hook, errors
                 )
-            elif e.is_file() and is_test_file(e.name):
+            elif e.is_file() and hook.is_test_file(e.name):
                 hook.before_file(e, import_prefix)
                 fq = import_prefix + "." + e.name[:-3]
                 try:
@@ -142,15 +141,14 @@ def validate_subset(
 
 
 def validate_folder(
-    base: str, sub: str, hook: ValidatorHook, t: Tracker, g: ModuleGraph
+    fs: str, py: str, hook: ValidatorHook, t: Tracker, g: ModuleGraph
 ) -> Tuple[int, int]:
     # print_with_timestamp(f"--- {base}")
     # put package path first in sys.path to ensure finding test files
-    sys.path.insert(0, os.path.abspath(base))
+    sys.path.insert(0, os.path.abspath(os.path.dirname(fs)))
     old_k = set(sys.modules.keys())
 
-    sub_path = os.path.join(base, sub) if base != "." else sub
-    hook.before_folder(base, sub)
+    hook.before_folder(fs, py)
 
     errors: Dict[str, BaseException] = {}
 
@@ -158,53 +156,57 @@ def validate_folder(
     # while preserving the appropriate import name, to allow for:
     #  - resolution of __init__.py
     #  - resolution of test helpers, via absolute or relative import
-    imported = recursive_import_tests(sub_path, sub, hook, errors)
+    imported = recursive_import_tests(fs, py, hook, errors)
 
     if errors:
-        print(f"{len(errors)} exceptions encountered!")
+        print(f"{len(errors)} exceptions encountered in {fs} / {py}!")
 
         for filepath, ex in errors.items():
             print_with_timestamp(f"--- {filepath}")
             print(f"{type(ex)} {ex}")
             print_clean_traceback(traceback.extract_tb(ex.__traceback__))
 
-    with_dynamic = {}
-    for m in imported:
-        with_dynamic[m] = t.with_dynamic(m)
+    is_local_ns = py.partition(".")[0] in hook.local_namespaces()
 
-    # NB: do validation at the package level for the test namespace
-    # this is necessary because it is not a unified namespace. There can be
-    # conflicts between similarly named test modules across packages.
-    #
-    # NB: we only validate test files, not test helpers. This is because, for
-    # performance reason, dynamic dependencies are only applied to nodes of the
-    # import graphs that do not have any ancestors (i.e modules not imported by
-    # any other module)
-    # This is fine because the purpose of this validation is to ensure that we
-    # can determine a set of affected *test files* from a given set of modified
-    # files, so as long as we validate that tests have matching imports between
-    # python and Rust, we're good to go.
-    def is_local_test_module(module: str) -> bool:
-        last = module.rpartition(".")[2]
-        return module.startswith(sub) and (
-            last.startswith("test_") or last.endswith("_test")
+    if is_local_ns:
+        with_dynamic = {}
+        for m in imported:
+            with_dynamic[m] = t.with_dynamic(m)
+
+        # NB: do validation at the package level for the test namespace
+        # this is necessary because it is not a unified namespace. There can be
+        # conflicts between similarly named test modules across packages.
+        #
+        # NB: we only validate test files, not test helpers. This is because, for
+        # performance reason, dynamic dependencies are only applied to nodes of the
+        # import graphs that do not have any ancestors (i.e modules not imported by
+        # any other module)
+        # This is fine because the purpose of this validation is to ensure that we
+        # can determine a set of affected *test files* from a given set of modified
+        # files, so as long as we validate that tests have matching imports between
+        # python and Rust, we're good to go.
+        def is_local_test_module(module: str) -> bool:
+            last = module.rpartition(".")[2]
+            return module.startswith(py) and hook.is_test_file(last + ".py")
+
+        num_mismatching_files = validate_subset(
+            with_dynamic, g, package=fs, filter_fn=is_local_test_module
         )
 
-    num_mismatching_files = validate_subset(
-        with_dynamic, g, package=sub_path, filter_fn=is_local_test_module
-    )
+        # cleanup to avoid contaminating subsequent iterations
+        new_k = sys.modules.keys() - old_k
+        for m in new_k:
+            if m.startswith(py) and (len(m) <= len(py) or m[len(py)] == "."):
+                del t.tracked[m]
+                if m in t.dynamic_users:
+                    del t.dynamic_users[m]
+                del sys.modules[m]
+    else:
+        num_mismatching_files = 0
 
-    # cleanup to avoid contaminating subsequent iterations
     sys.path = sys.path[1:]
-    new_k = sys.modules.keys() - old_k
-    for m in new_k:
-        if m.partition(".")[0] == sub:
-            del t.tracked[m]
-            if m in t.dynamic_users:
-                del t.dynamic_users[m]
-            del sys.modules[m]
 
-    hook.after_folder(base, sub)
+    hook.after_folder(fs, py)
 
     return len(errors), num_mismatching_files
 
@@ -239,14 +241,13 @@ def validate(
 
     # TODO: user-defined order (toposort of package dep graph...)
     print_with_timestamp("--- tracking python imports")
-    for base, sub in sorted(hook.test_folders().items()):
-        assert sub in hook.local_namespaces(), f"{sub} not in {hook.local_namespaces()}"
+    for fs, py in sorted(hook.test_folders().items()):
+        # FIXME: need to support test files being inside global namespace...
+        # both: interspersed all over normal code, and in subfolder nested in normal code
 
-        # some packages do not have tests, simply skip them
-        if not os.path.isdir(os.path.join(base, sub)):
-            continue
+        # assert sub in hook.local_namespaces(), f"{sub} not in {hook.local_namespaces()}"
 
-        n_errors, n_mismatching_files = validate_folder(base, sub, hook, t, g)
+        n_errors, n_mismatching_files = validate_folder(fs, py, hook, t, g)
 
         files_with_missing_imports += n_mismatching_files
         error_count += n_errors
@@ -295,6 +296,11 @@ if __name__ == "__main__":
         else:
             print(f"invalid argument {sys.argv[i]}")
             sys.exit(2)
+
+    # TODO: support override from hook
+    from testfully import configure_logger
+
+    configure_logger("/dev/stdout", "info")
 
     n_err, m_missing = validate(hook_path=hook_path, graph_path=graph_path)
 
