@@ -284,11 +284,12 @@ class Tracker:
 
     def enter_context(self, cxt: str) -> None:
         assert cxt not in self.stack
-        assert cxt not in self.tracked
-        deps: Set[str] = set()
+        # assert cxt not in self.tracked
         self.stack.append(cxt)
-        self.tracked[cxt] = deps
-        self.cxt = deps
+        if cxt not in self.tracked:
+            deps: Set[str] = set()
+            self.tracked[cxt] = deps
+        self.cxt = self.tracked[cxt]
 
     def exit_context(self, expected: str) -> None:
         actual = self.stack.pop()

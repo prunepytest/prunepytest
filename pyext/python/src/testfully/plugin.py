@@ -2,22 +2,35 @@
 pytest plugin
 """
 
-import sys
 from warnings import WarningMessage
 
 import pathlib
 import pytest
 import subprocess
 
-from typing import Any, AbstractSet, Set
+from typing import Any, AbstractSet, Optional, List
 
 from _pytest.config import ExitCode
+from _pytest.reports import TestReport
+from _pytest.runner import CallInfo
+from typing_extensions import Generator
 
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
 from .util import load_import_graph, load_hook, hook_zeroconf
 from .tracker import Tracker
 from .vcs.detect import detect_vcs
+
+
+# detect xdist and adjust behavior accordingly
+try:
+    from xdist import is_xdist_controller, is_xdist_worker  # type: ignore[import-not-found]
+except ImportError:
+    is_xdist_controller = is_xdist_worker = lambda session: False
+
+
+def raise_(e: BaseException) -> None:
+    raise e
 
 
 def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
@@ -84,6 +97,10 @@ def pytest_configure(config: Any) -> None:
     if not opt.testfully:
         return
 
+    # Skip this plugin entirely when only doing collection.
+    if config.getvalue("collectonly"):
+        return
+
     # old versions of pluggy do not have force_exception...
     import pluggy  # type: ignore[import-untyped]
 
@@ -109,6 +126,8 @@ def pytest_configure(config: Any) -> None:
             rel_root = None
 
     # TODO: chdir to make sure the import graph is for the whole repo?
+    # TODO: coordinate with pytest-xdist, if used, to avoid redundant work here...
+    # e.g. use a temporary file to serialize graph if no explicit graph used...
     graph = load_import_graph(hook, opt.testfully_graph)
 
     if not opt.testfully_novalidate:
@@ -131,10 +150,10 @@ def pytest_configure(config: Any) -> None:
             print("deriving test set for uncommitted changes")
             modified = vcs.dirty_files()
 
-        print(f"modified: {modified}", file=sys.stderr)
+        print(f"modified: {modified}")
 
         affected = graph.affected_by_files(modified)
-        print(f"affected: {affected}", file=sys.stderr)
+        print(f"affected: {affected}")
 
         config.pluginmanager.register(
             TestfullySelect(affected | set(modified)),
@@ -159,88 +178,124 @@ class TestfullyValidate:
             # TODO: override from pytest config?
             log_file=hook.tracker_log(),
         )
-        self.files_to_validate: Set[str] = set()
-        self.unexpected = (0, 0)
 
-    @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_runtestloop(self, session):  # type: ignore
-        res = yield
+        # pytest-xdist is a pain to deal with:
+        # the controller and each worker get an independent instance of the plugin
+        # then the controller mirrors all the hook invocations of *every* worker,
+        # interleaved in arbitrary order. To avoid creating nonsensical internal
+        # state, we need to skip some hook processing on the controller
+        # Unfortunately, the only reliable way to determine worker/controller context,
+        # is by checking the Session object, which is created after the hook object,
+        # and not passed to every hook function, so we have to detect context on the
+        # first hook invocation, and refer to it in subsequent invocations.
+        self.is_controller = False
 
-        u = (0, 0)
-        for f in self.files_to_validate:
-            # NB: fix test file location to be consistent with graph
-            graph_path = str(self.rel_root / f) if self.rel_root else f
-            import_path = f[:-3].replace("/", ".")
+        # we track imports at module granularity, but we have to run validation at
+        # test item granularity to be able to accurately attach warnings and errors
+        self.current_file: Optional[str] = None
+        self.expected_imports: Optional[AbstractSet[str]] = None
 
-            expected = self.graph.file_depends_on(graph_path)
-            actual = self.tracker.with_dynamic(import_path)
+    @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
+    def pytest_sessionstart(
+        self, session: pytest.Session
+    ) -> Generator[Any, None, None]:
+        if is_xdist_controller(session):
+            self.is_controller = True
 
-            if not expected or not actual:
-                print(f"\nwarn: bad path mapping? {f} -> {import_path} / {graph_path}")
+        return (yield)
 
-            unexpected = actual - (expected or set())
-            if unexpected:
-                session.ihook.pytest_warning_recorded.call_historic(
-                    kwargs=dict(
-                        warning_message=WarningMessage(
-                            f"{len(unexpected)} unexpected imports {unexpected}",
-                            Warning,
-                            f,
-                            0,
-                        ),
-                        when="runtest",
-                        nodeid=f,
-                        location=(f, 0, "<module>"),
-                    )
-                )
-                u = (u[0] + 1, u[1] + len(unexpected))
-
-        self.unexpected = u
-
-        return res
-
-    @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_sessionfinish(self, session):  # type: ignore
+    @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
+    def pytest_sessionfinish(
+        self, session: pytest.Session
+    ) -> Generator[Any, None, None]:
         self.tracker.stop_tracking()
+
+        return (yield)
+
+    @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
+    def pytest_runtest_protocol(
+        self, item: pytest.Item, nextitem: pytest.Item
+    ) -> Generator[Any, None, None]:
+        # only performa validation on workers when running with xdist...
+        if self.is_controller:
+            return (yield)
+
+        f = item.location[0]
+
+        # TODO: might need further path adjustment?
+        graph_path = str(self.rel_root / f) if self.rel_root else f
+        import_path = f[:-3].replace("/", ".")
+
+        # TODO: add some sort of callback to catch and flag new imports directly in Tracker
+        # this would allow including the relevant stack trace in the error
+        self.tracker.enter_context(import_path)
+
+        before = self.tracker.with_dynamic(import_path)
+
+        if graph_path != self.current_file:
+            self.current_file = graph_path
+            self.expected_imports = self.graph.file_depends_on(graph_path)
+
+            # baseline for first test item in this file
+            # NB: might be triggered multiple times with xdist, and that's OK
+            unexpected = before - self.expected_imports
+            if unexpected:
+                _report_unexpected(item, unexpected)
+
+        expected = self.expected_imports or set()
 
         outcome = yield
 
-        u = self.unexpected
-        if u[0] > 0 and not session.config.option.testfully_warnonly:
-            outcome.force_exception(
-                pytest.exit.Exception(
-                    f"{u[1]} unexpected import{'s' if u[1] > 1 else ''} "
-                    f"in {u[0]} file{'s' if u[0] > 1 else ''}",
-                    pytest.ExitCode.TESTS_FAILED,
-                )
-            )
+        self.tracker.exit_context(import_path)
+
+        after = self.tracker.with_dynamic(import_path)
+
+        caused_by_test = after - before
+
+        unexpected = caused_by_test - expected
+        if unexpected:
+            _report_unexpected(item, unexpected)
 
         return outcome
 
-    @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_runtest_logstart(self, nodeid, location):  # type: ignore
-        f = location[0]
-        self.files_to_validate.add(f)
-        import_path = f[:-3].replace("/", ".")
-        self.tracker.enter_context(import_path)
 
-        return (yield)
-
-    @pytest.hookimpl(tryfirst=True, hookwrapper=True)
-    def pytest_runtest_logfinish(self, nodeid, location):  # type: ignore
-        f = location[0]
-        import_path = f[:-3].replace("/", ".")
-        self.tracker.exit_context(import_path)
-
-        return (yield)
+def _report_unexpected(item, unexpected):
+    if item.session.config.option.testfully_warnonly:
+        f = item.location[0]
+        item.session.ihook.pytest_warning_recorded.call_historic(
+            kwargs=dict(
+                warning_message=WarningMessage(
+                    f"{len(unexpected)} unexpected imports: {unexpected}",
+                    Warning,
+                    f,
+                    0,
+                ),
+                when="runtest",
+                nodeid=f,
+                location=(f, 0, "<module>"),
+            )
+        )
+    else:
+        report = TestReport.from_item_and_call(
+            item=item,
+            call=CallInfo.from_call(
+                func=lambda: raise_(
+                    ImportError(f"{len(unexpected)} unexpected imports: {unexpected}")
+                ),
+                when="teardown",
+            ),
+        )
+        item.ihook.pytest_runtest_logreport(report=report)
 
 
 class TestfullySelect:
     def __init__(self, affected: AbstractSet[str]) -> None:
         self.affected = affected
 
-    @pytest.hookimpl(trylast=True)
-    def pytest_collection_modifyitems(self, session, config, items):  # type: ignore
+    @pytest.hookimpl(trylast=True)  # type: ignore
+    def pytest_collection_modifyitems(
+        self, session: pytest.Session, config: pytest.Config, items: List[pytest.Item]
+    ) -> None:
         n = len(items)
         skipped = []
 
@@ -256,10 +311,11 @@ class TestfullySelect:
 
         session.ihook.pytest_deselected(items=skipped)
 
-        print(f"skipped: {len(skipped)}/{n}", file=sys.stderr)
-        print(f"remains: {items}")
+        print(f"skipped: {len(skipped)}/{n}")
 
-    @pytest.hookimpl(trylast=True)
-    def pytest_sessionfinish(self, session, exitstatus):
+    @pytest.hookimpl(trylast=True)  # type: ignore
+    def pytest_sessionfinish(
+        self, session: pytest.Session, exitstatus: ExitCode
+    ) -> None:
         if exitstatus == ExitCode.NO_TESTS_COLLECTED:
             session.exitstatus = ExitCode.OK
