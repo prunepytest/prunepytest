@@ -3,6 +3,7 @@ import os
 import pathlib
 import sys
 import time
+import warnings
 from fnmatch import fnmatch
 from typing import cast, Any, Optional, Set, Tuple, Type, TypeVar, Dict
 
@@ -118,17 +119,16 @@ def infer_ns_pkg(
 
 
 def parse_toml(filepath: str) -> Dict[str, Any]:
+    pyver = sys.version_info
+    target = "tomllib" if pyver[0] == 3 and pyver[1] >= 11 else "tomli"
     try:
-        # available on py 3.11+
-        import tomllib
+        tomllib = __import__(target)
     except ImportError:
-        try:
-            import tomli as tomllib  # type: ignore[import-not-found, no-redef]
-        except ImportError:
-            return {}
+        warnings.warn(f"unable to parse {filepath}, consider installing tomli")
+        return {}
 
     with open(filepath, "rb") as f:
-        return tomllib.load(f)
+        return cast(Dict[str, Any], tomllib.load(f))
 
 
 def toml_xtract(cfg: Dict[str, Any], cfg_path: str) -> Any:

@@ -99,4 +99,4 @@ def test_hook_zeroconf() -> None:
             if pkg != "ns"
         },
     }
-    assert hook.test_folders() == {"python/tests": "tests"}
+    assert hook.test_folders() == {os.path.join("python", "tests"): "tests"}
