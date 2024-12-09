@@ -133,6 +133,8 @@ def pytest_configure(config: pytest.Config) -> None:
         # so we need to adjust in case of running tests in a subdir
         repo_root = vcs.repo_root()
         rel_root = config.rootpath.relative_to(repo_root)
+    else:
+        rel_root = config.rootpath.relative_to(pathlib.Path.cwd())
 
     graph_path = opt.testfully_graph
     if graph_path and not os.path.isfile(graph_path):
@@ -207,7 +209,11 @@ class GraphLoader:
             # print(f"worker loading graph from {graph_path}")
             graph = ModuleGraph.from_file(graph_path)
         else:
-            load_path = self.graph_path if os.path.isfile(self.graph_path) else None
+            load_path = (
+                self.graph_path
+                if self.graph_path and os.path.isfile(self.graph_path)
+                else None
+            )
             # TODO: chdir to make sure the import graph is for the whole repo?
             graph = load_import_graph(self.hook, load_path)
 
@@ -313,7 +319,7 @@ class TestfullyValidate:
         import_path = f[:-3].replace("/", ".")
 
         def import_callback(name: str) -> None:
-            if self.expected_imports and name not in self.expected_imports:
+            if not self.expected_imports or name not in self.expected_imports:
                 if item.session.config.option.testfully_warnonly:
                     # TODO: stack?
                     warnings.warn(f"unexpected import {name}")
