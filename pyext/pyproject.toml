@@ -41,3 +41,8 @@ compatibility = "manylinux2014"
 # auditwheel mode, possible values are repair, check and skip
 auditwheel = "repair"
 features = ["pyo3/abi3-py37", "pyo3/extension-module"]
+
+
+[tool.pytest.ini_options]
+minversion = 7.2
+addopts = "-p pytester"
