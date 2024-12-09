@@ -7,6 +7,7 @@ use dashmap::{DashMap, Entry};
 use ignore::{DirEntry, WalkBuilder, WalkState};
 use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
+use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
 use std::sync::mpsc;
 use std::{fs, thread};
 use ustr::{ustr, Ustr};
@@ -57,7 +58,7 @@ impl ModuleGraph {
                     .filter(|v| global_prefixes.contains(root_namespace(v))),
                 '.',
             ),
-            package_matcher: MatcherNode::from(source_roots.keys(), '/'),
+            package_matcher: MatcherNode::from(source_roots.keys(), MAIN_SEPARATOR),
             // reverse, ignoring local
             import_roots: HashMap::from_iter(source_roots.iter().filter_map(|(k, v)| {
                 if global_prefixes.contains(root_namespace(v)) {
@@ -179,8 +180,8 @@ impl ModuleGraph {
                         if dpkg != pkg {
                             // relaxed neighbor check
                             assert_eq!(
-                                &dpkg[..dpkg.rfind('/').unwrap()],
-                                &pkg[..pkg.rfind('/').unwrap()]
+                                &dpkg[..dpkg.rfind(MAIN_SEPARATOR).unwrap()],
+                                &pkg[..pkg.rfind(MAIN_SEPARATOR).unwrap()]
                             );
                         }
                     }
@@ -236,7 +237,7 @@ impl ModuleGraph {
         // a match
 
         // fast path because readdir is expensive
-        if !fs::exists(dir.to_string() + "/" + name).unwrap_or(false) {
+        if !fs::exists(dir.to_string() + MAIN_SEPARATOR_STR + name).unwrap_or(false) {
             return false;
         }
         // use a cache of directory listings, because readdir is expensive
@@ -275,7 +276,7 @@ impl ModuleGraph {
 
         let mut depbase = fs_candidate.to_string();
         for _ in 0..2 {
-            let candidate_init = ustr(&(depbase.clone() + "/__init__.py"));
+            let candidate_init = ustr(&(depbase.clone() + MAIN_SEPARATOR_STR + "__init__.py"));
             let candidate_module = ustr(&(depbase.clone() + ".py"));
 
             if let Some(r) = self.modules_refs.ref_for_fs(candidate_init) {
@@ -291,7 +292,7 @@ impl ModuleGraph {
                     self.modules_refs
                         .get_or_create(candidate_init, dep, local_fs_root),
                 );
-            } else if let Some((dir, name)) = candidate_module.rsplit_once('/') {
+            } else if let Some((dir, name)) = candidate_module.rsplit_once(MAIN_SEPARATOR) {
                 if self.exists_case_sensitive(dir, name) {
                     return Some(self.modules_refs.get_or_create(
                         candidate_module,
@@ -364,7 +365,7 @@ impl ModuleGraph {
                         let subdep = dep.to_string() + "." + &sub;
                         self.to_module_no_cache(
                             ustr(&subdep),
-                            &(fs_cand.clone() + "/" + &sub),
+                            &(fs_cand.clone() + MAIN_SEPARATOR_STR + &sub),
                             local_fs_root,
                         )
                     })
@@ -436,14 +437,17 @@ impl ModuleGraph {
 
     /// Map an arbitrary file path to a matching source root, if possible
     fn fs_to_py<'a>(&self, filepath: &'a str) -> Option<(&'a str, String)> {
-        let fs_root_candidate = self.package_matcher.longest_prefix(filepath, '/');
+        let fs_root_candidate = self
+            .package_matcher
+            .longest_prefix(filepath, MAIN_SEPARATOR);
         let py_root = self.source_roots.get(fs_root_candidate);
         py_root?;
         Some((
             fs_root_candidate,
             // TODO: normalize '-' and '.' in module name to '_' ?
             // NB: would require being able to denormalize in py_to_fs...
-            py_root.unwrap().to_string() + &filepath[fs_root_candidate.len()..].replace('/', "."),
+            py_root.unwrap().to_string()
+                + &filepath[fs_root_candidate.len()..].replace(MAIN_SEPARATOR, "."),
         ))
     }
 
@@ -456,7 +460,8 @@ impl ModuleGraph {
                 // local namespace can only be reached from itself or its neighbors
                 if import_path.starts_with(py_root) {
                     Some((
-                        fs_root.to_string() + &import_path[py_root.len()..].replace('.', "/"),
+                        fs_root.to_string()
+                            + &import_path[py_root.len()..].replace('.', MAIN_SEPARATOR_STR),
                         Some(ustr(fs_root)),
                     ))
                 } else {
@@ -465,7 +470,8 @@ impl ModuleGraph {
                     if let Some(py_root) = self.source_roots.get(&neighbor) {
                         let local_fs_root = ustr(&neighbor);
                         Some((
-                            neighbor + &import_path[py_root.len()..].replace('.', "/"),
+                            neighbor
+                                + &import_path[py_root.len()..].replace('.', MAIN_SEPARATOR_STR),
                             Some(local_fs_root),
                         ))
                     } else {
@@ -477,7 +483,8 @@ impl ModuleGraph {
                 let py_root = self.import_matcher.longest_prefix(import_path, '.');
                 self.import_roots.get(py_root).map(|dst_root| {
                     (
-                        dst_root.to_string() + &import_path[py_root.len()..].replace('.', "/"),
+                        dst_root.to_string()
+                            + &import_path[py_root.len()..].replace('.', MAIN_SEPARATOR_STR),
                         None,
                     )
                 })
@@ -500,7 +507,7 @@ impl ModuleGraph {
 
         // remove .py suffix, turn / into .
         // NB: preserve __init__ for correct relative import resolution
-        let module = module[..module.len() - 3].replace('/', ".");
+        let module = module[..module.len() - 3].replace(MAIN_SEPARATOR, ".");
 
         match raw_get_all_imports(filepath, &module, true) {
             Ok((is_ns_pkg_init, imports)) => {

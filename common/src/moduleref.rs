@@ -1,6 +1,7 @@
 use speedy::private::{read_length_u64_varint, write_length_u64_varint};
 use speedy::{Context, Readable, Reader, Writable, Writer};
 use std::collections::HashMap;
+use std::path::MAIN_SEPARATOR;
 use std::sync::RwLock;
 use ustr::{ustr, Ustr};
 
@@ -138,7 +139,7 @@ impl ModuleRefCache {
     }
 
     pub fn get_or_create(&mut self, fs: Ustr, py: Ustr, pkg: Option<Ustr>) -> ModuleRef {
-        assert!(!py.contains('/'), "{} {}", fs, py);
+        assert!(!py.contains(MAIN_SEPARATOR), "{} {}", fs, py);
         if fs.is_empty() {
             assert!(pkg.is_none());
             if let Some(r) = self.py_to_ref_global.get(&py) {
