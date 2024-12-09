@@ -2,20 +2,21 @@
 pytest plugin
 """
 
+import os
 import warnings
 
 import pathlib
 import pytest
-import subprocess
 
-from typing import Any, AbstractSet, Optional, List
+from typing import Any, AbstractSet, Optional, List, Generator
 
 from _pytest._code import Traceback
 from _pytest.config import ExitCode
 from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
+from _pytest.tmpdir import TempPathFactory
+
 from testfully.tracker import IGNORED_FRAMES
-from typing_extensions import Generator
 
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
@@ -26,9 +27,14 @@ from .vcs.detect import detect_vcs
 
 # detect xdist and adjust behavior accordingly
 try:
-    from xdist import is_xdist_controller, is_xdist_worker  # type: ignore[import-not-found]
+    from xdist import is_xdist_controller  # type: ignore[import-not-found]
+
+    has_xdist = True
 except ImportError:
-    is_xdist_controller = is_xdist_worker = lambda session: False
+    has_xdist = False
+
+    def is_xdist_controller(session: pytest.Session) -> bool:
+        return False
 
 
 class UnexpectedImportException(Exception):
@@ -94,12 +100,11 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
         action="store",
         type=str,
         dest="testfully_graph",
-        default=".testfully.bin",
         help=("File in which the import graph is stored"),
     )
 
 
-def pytest_configure(config: Any) -> None:
+def pytest_configure(config: pytest.Config) -> None:
     opt = config.option
     if not opt.testfully:
         return
@@ -126,16 +131,33 @@ def pytest_configure(config: Any) -> None:
     elif vcs:
         # the import graph is assumed to be full of repo-relative path
         # so we need to adjust in case of running tests in a subdir
-        try:
-            repo_root = vcs.repo_root()
-            rel_root = config.rootpath.relative_to(repo_root)
-        except subprocess.CalledProcessError:
-            rel_root = None
+        repo_root = vcs.repo_root()
+        rel_root = config.rootpath.relative_to(repo_root)
 
-    # TODO: chdir to make sure the import graph is for the whole repo?
-    # TODO: coordinate with pytest-xdist, if used, to avoid redundant work here...
-    # e.g. use a temporary file to serialize graph if no explicit graph used...
-    graph = load_import_graph(hook, opt.testfully_graph)
+    graph_path = opt.testfully_graph
+    if graph_path and not os.path.isfile(graph_path):
+        graph_path = None
+
+    if has_xdist:
+        # when running under xdist we want to avoid redundant work so we save the graph
+        # computed by the controller in a temporary folder shared with all workers
+        # with name that is based on the test run id so every worker can easily find it
+        if not graph_path:
+            tmpdir: pathlib.Path = TempPathFactory.from_config(
+                config, _ispytest=True
+            ).getbasetemp()
+            graph_path = str(tmpdir / "tf-graph.bin")
+
+        # use xdist hooks to propagate the path to all workers
+        class XdistConfig:
+            @pytest.hookimpl()  # type: ignore
+            def pytest_configure_node(self, node: Any) -> None:
+                # print(f"configure node {node.workerinput['workerid']}: graph_path={graph_path}")
+                node.workerinput["graph_path"] = graph_path
+
+        config.pluginmanager.register(XdistConfig(), "testfully_xdist_config")
+
+    graph = GraphLoader(config, hook, graph_path)
 
     if not opt.testfully_novalidate:
         config.pluginmanager.register(
@@ -159,18 +181,46 @@ def pytest_configure(config: Any) -> None:
 
         print(f"modified: {modified}")
 
-        affected = graph.affected_by_files(modified)
-        print(f"affected: {affected}")
-
         config.pluginmanager.register(
-            TestfullySelect(affected | set(modified)),
+            TestfullySelect(graph, set(modified)),
             "TestfullySelect",
         )
 
 
+class GraphLoader:
+    def __init__(
+        self, config: pytest.Config, hook: PluginHook, graph_path: str
+    ) -> None:
+        self.config = config
+        self.hook = hook
+        self.graph_path = graph_path
+        self.graph: Optional[ModuleGraph] = None
+
+    def get(self, session: pytest.Session) -> ModuleGraph:
+        if not self.graph:
+            self.graph = self.load(session)
+        return self.graph
+
+    def load(self, session: pytest.Session) -> ModuleGraph:
+        if hasattr(session.config, "workerinput"):
+            graph_path = session.config.workerinput["graph_path"]
+            # print(f"worker loading graph from {graph_path}")
+            graph = ModuleGraph.from_file(graph_path)
+        else:
+            load_path = self.graph_path if os.path.isfile(self.graph_path) else None
+            # TODO: chdir to make sure the import graph is for the whole repo?
+            graph = load_import_graph(self.hook, load_path)
+
+            if is_xdist_controller(session) and not load_path:
+                print(f"saving import graph to {self.graph_path}")
+                graph.to_file(self.graph_path)
+
+        return graph
+
+
 class TestfullyValidate:
     def __init__(
-        self, hook: PluginHook, graph: ModuleGraph, rel_root: pathlib.Path
+        self, hook: PluginHook, graph: GraphLoader, rel_root: pathlib.Path
     ) -> None:
         self.hook = hook
         self.graph = graph
@@ -208,6 +258,8 @@ class TestfullyValidate:
     ) -> Generator[Any, None, None]:
         if is_xdist_controller(session):
             self.is_controller = True
+            # ensure the import graph is computed before the workers need it
+            self.graph.get(session)
 
         return (yield)
 
@@ -276,7 +328,9 @@ class TestfullyValidate:
 
         if graph_path != self.current_file:
             self.current_file = graph_path
-            self.expected_imports = self.graph.file_depends_on(graph_path) or set()
+            self.expected_imports = (
+                self.graph.get(item.session).file_depends_on(graph_path) or set()
+            )
 
             # sanity check: make sure the import graph covers everything that was
             # imported when loading the test file.
@@ -333,8 +387,9 @@ def _report_unexpected(item: pytest.Item, unexpected: AbstractSet[str]) -> None:
 
 
 class TestfullySelect:
-    def __init__(self, affected: AbstractSet[str]) -> None:
-        self.affected = affected
+    def __init__(self, graph: GraphLoader, modified: AbstractSet[str]) -> None:
+        self.graph = graph
+        self.modified = modified
 
     @pytest.hookimpl(trylast=True)  # type: ignore
     def pytest_collection_modifyitems(
@@ -343,11 +398,16 @@ class TestfullySelect:
         n = len(items)
         skipped = []
 
+        affected = (
+            self.graph.get(session).affected_by_files(self.modified) | self.modified
+        )
+        # print(f"affected: {affected}", file=sys.stderr)
+
         # loop from the end to easily remove items as we go
         i = len(items) - 1
         while i >= 0:
             item = items[i]
-            keep = item.location[0] in self.affected
+            keep = item.location[0] in affected
             if not keep:
                 skipped.append(item)
                 del items[i]

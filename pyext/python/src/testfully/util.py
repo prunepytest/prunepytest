@@ -62,10 +62,6 @@ def load_import_graph(hook: BaseHook, file: Optional[str]) -> ModuleGraph:
             print_with_timestamp("--- incorporating dynamic dependencies")
             g.add_dynamic_dependencies_at_edges(unified, per_pkg)
 
-        if file:
-            print_with_timestamp("--- saving import graph")
-            g.to_file(file)
-
     return g
 
 

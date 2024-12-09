@@ -234,6 +234,9 @@ def validate(
     hook.setup()
 
     g = load_import_graph(hook, graph_path)
+    if graph_path and not os.path.exists(graph_path):
+        print_with_timestamp("--- saving import graph")
+        g.to_file(graph_path)
 
     # keep track or errors and import differences
     files_with_missing_imports = 0
