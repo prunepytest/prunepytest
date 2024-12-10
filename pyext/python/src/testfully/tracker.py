@@ -4,6 +4,7 @@ import io
 import sys
 import traceback
 import types
+import warnings
 from functools import wraps
 
 from typing import (
@@ -21,11 +22,50 @@ from typing import (
     Union,
 )
 
+
+import testfully
+
+
 IGNORED_FRAMES = {
     __file__,
     "<frozen importlib._bootstrap>",
     "<frozen importlib._bootstrap_external>",
 }
+
+
+def warning_skip_level() -> int:
+    """
+    Compute the correct value of stacklevel to pass to warnings.warn in order
+    to skip all testfully frames and point directly at the location of an
+    unexpected import, when called from a Tracker import_callback
+
+    NB: this might not be 100% accurate if other code hooks into the import machinery
+    NB: this relies on CPython implementation details
+    """
+    lvl = 1
+    skip = 1
+    while True:
+        f = sys._getframe(lvl)
+        if f.f_code.co_filename.startswith(tuple(testfully.__path__)):
+            skip += 1
+        elif not warnings._is_internal_frame(f):  # type: ignore[attr-defined]
+            break
+        lvl += 1
+    return skip
+
+
+def relevant_frame_index(tb: types.TracebackType) -> int:
+    """
+    Find the index in the given traceback that comes immediately before entering
+    Tracker or importlib frames, making it the best guess for dynamic import location
+
+    NB: this might not be 100% accurate if other code hooks into the import machinery
+    """
+    i = 0
+    while tb.tb_next and tb.tb_next.tb_frame.f_code.co_filename not in IGNORED_FRAMES:
+        i += 1
+        tb = tb.tb_next
+    return i
 
 
 def omit_tracker_frames(
