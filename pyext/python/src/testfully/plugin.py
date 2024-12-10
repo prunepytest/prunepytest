@@ -16,11 +16,11 @@ from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
 from _pytest.tmpdir import TempPathFactory
 
-from testfully.tracker import IGNORED_FRAMES
+from testfully.tracker import relevant_frame_index, warning_skip_level
 
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
-from .util import load_import_graph, load_hook, hook_zeroconf
+from .util import chdir, load_import_graph, load_hook, hook_zeroconf
 from .tracker import Tracker
 from .vcs.detect import detect_vcs
 
@@ -66,6 +66,27 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     )
 
     group.addoption(
+        "--tf-modified",
+        action="store",
+        type=str,
+        dest="testfully_modified",
+        help=(
+            "Comma-separated list of modified files to use as basis for test selection."
+            "The default behavior is to use data from the last git (or other supported VCS)"
+            "commit, and uncommitted changes."
+            "If specified, takes precedence over --tf-base-commit"
+        ),
+    )
+
+    group.addoption(
+        "--tf-base-commit",
+        action="store",
+        type=str,
+        dest="testfully_base_commit",
+        help=("Base commit id to use when computing affected files."),
+    )
+
+    group.addoption(
         "--tf-novalidate",
         action="store_true",
         dest="testfully_novalidate",
@@ -76,7 +97,7 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
         "--tf-warnonly",
         action="store_true",
         dest="testfully_warnonly",
-        help=("Only warn instead of failing upon unexpected imports"),
+        help=("Only warn, instead of failing tests that trigger unexpected imports"),
     )
 
     group.addoption(
@@ -100,7 +121,10 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
         action="store",
         type=str,
         dest="testfully_graph",
-        help=("File in which the import graph is stored"),
+        help=(
+            "Path to an existing serialized import graph"
+            "to be used, instead of computing a fresh one."
+        ),
     )
 
 
@@ -126,15 +150,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
     vcs = detect_vcs()
 
-    if opt.testfully_graph_root:
-        rel_root = config.rootpath.relative_to(opt.testfully_graph_root)
-    elif vcs:
-        # the import graph is assumed to be full of repo-relative path
-        # so we need to adjust in case of running tests in a subdir
-        repo_root = vcs.repo_root()
-        rel_root = config.rootpath.relative_to(repo_root)
-    else:
-        rel_root = config.rootpath.relative_to(pathlib.Path.cwd())
+    graph_root = opt.testfully_graph_root or (
+        vcs.repo_root() if vcs else str(config.rootpath)
+    )
+    rel_root = config.rootpath.relative_to(graph_root)
 
     graph_path = opt.testfully_graph
     if graph_path and not os.path.isfile(graph_path):
@@ -159,7 +178,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
         config.pluginmanager.register(XdistConfig(), "testfully_xdist_config")
 
-    graph = GraphLoader(config, hook, graph_path)
+    graph = GraphLoader(config, hook, graph_path, graph_root)
 
     if not opt.testfully_novalidate:
         config.pluginmanager.register(
@@ -168,18 +187,15 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
     if not opt.testfully_noselect:
-        if vcs is None:
-            raise ValueError("unsupported VCS for test selection...")
-
-        # TODO: accept args to specify target and base commits
-        # TODO: extract derivation of affected set to helper function
-
-        if vcs.is_repo_clean():
-            print("deriving test set for changes in last commit")
-            modified = vcs.modified_files()
+        if opt.testfully_modified is not None:
+            modified = opt.testfully_modified.split(",")
+        elif vcs:
+            modified = (
+                vcs.modified_files(base_commit=opt.testfully_base_commit)
+                + vcs.dirty_files()
+            )
         else:
-            print("deriving test set for uncommitted changes")
-            modified = vcs.dirty_files()
+            raise ValueError("unsupported VCS for test selection...")
 
         print(f"modified: {modified}")
 
@@ -191,11 +207,12 @@ def pytest_configure(config: pytest.Config) -> None:
 
 class GraphLoader:
     def __init__(
-        self, config: pytest.Config, hook: PluginHook, graph_path: str
+        self, config: pytest.Config, hook: PluginHook, graph_path: str, graph_root: str
     ) -> None:
         self.config = config
         self.hook = hook
         self.graph_path = graph_path
+        self.graph_root = graph_root
         self.graph: Optional[ModuleGraph] = None
 
     def get(self, session: pytest.Session) -> ModuleGraph:
@@ -214,8 +231,9 @@ class GraphLoader:
                 if self.graph_path and os.path.isfile(self.graph_path)
                 else None
             )
-            # TODO: chdir to make sure the import graph is for the whole repo?
-            graph = load_import_graph(self.hook, load_path)
+
+            with chdir(self.graph_root):
+                graph = load_import_graph(self.hook, load_path)
 
             if is_xdist_controller(session) and not load_path:
                 print(f"saving import graph to {self.graph_path}")
@@ -284,15 +302,9 @@ class TestfullyValidate:
         # clean up the traceback for our custom validation exception
         if call.excinfo and call.excinfo.type is UnexpectedImportException:
             tb = call.excinfo.traceback
-            i = 0
             # remove the tail of the traceback, starting at the first frame that lands
             # in the tracker, or importlib
-            while (
-                i + 1 < len(tb)
-                and tb[i + 1]._rawentry.tb_frame.f_code.co_filename
-                not in IGNORED_FRAMES
-            ):
-                i += 1
+            i = relevant_frame_index(tb[0]._rawentry)
             # to properly remove the top of the stack, we need to both
             #  1. shrink the high-level vector
             #  2. sever the link in the underlying low-level linked list of stack frames
@@ -318,11 +330,17 @@ class TestfullyValidate:
         graph_path = str(self.rel_root / f) if self.rel_root else f
         import_path = f[:-3].replace("/", ".")
 
+        # keep track of warnings emitted by the import callback, to avoid double-reporting
+        warnings_emitted = set()
+
         def import_callback(name: str) -> None:
             if not self.expected_imports or name not in self.expected_imports:
                 if item.session.config.option.testfully_warnonly:
-                    # TODO: stack?
-                    warnings.warn(f"unexpected import {name}")
+                    # stack munging: we want the warning to point to the unexpected import location
+                    skip = warning_skip_level()
+
+                    warnings.warn(f"unexpected import {name}", stacklevel=skip)
+                    warnings_emitted.add(name)
                 else:
                     raise UnexpectedImportException(f"unexpected import {name}")
 
@@ -356,7 +374,8 @@ class TestfullyValidate:
 
         # sanity check: did we track any imports that somehow bypassed the callback?
         caused_by_test = after - before
-        unexpected = caused_by_test - expected
+        # NB: for warning-only mode, make sure we avoid double reporting
+        unexpected = caused_by_test - expected - warnings_emitted
         if unexpected:
             _report_unexpected(item, unexpected)
 
