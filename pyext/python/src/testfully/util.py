@@ -4,8 +4,10 @@ import pathlib
 import sys
 import time
 import warnings
+from contextlib import contextmanager
 from fnmatch import fnmatch
-from typing import cast, Any, Optional, Set, Tuple, Type, TypeVar, Dict
+from typing import cast, Any, Dict, Generator, Optional, Set, Tuple, Type, TypeVar
+
 
 from . import ModuleGraph
 from .api import ZeroConfHook, BaseHook
@@ -36,7 +38,17 @@ def import_file(name: str, filepath: str) -> Any:
     return mod
 
 
-def load_import_graph(hook: BaseHook, file: Optional[str]) -> ModuleGraph:
+@contextmanager
+def chdir(d: str) -> Generator[None, None, None]:
+    prev = os.getcwd()
+    os.chdir(d)
+    try:
+        yield None
+    finally:
+        os.chdir(prev)
+
+
+def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph:
     # TODO: we could move most of this into a separate thread
     # load graph from file if provided, otherwise parse the repo
     if file and os.path.exists(file):
@@ -183,7 +195,7 @@ def hook_zeroconf(
         global_ns.add(py_path.partition(".")[0])
         source_roots[str(fs_path)] = py_path
 
-    # TODO: also check pytest.ini
+    # TODO: also check pytest.ini?
     tst_paths = toml_xtract(pyproj, "tool.pytest.ini_options.testpaths")
     if tst_paths:
         print(f"use testpaths from pyproject.toml: {tst_paths}")

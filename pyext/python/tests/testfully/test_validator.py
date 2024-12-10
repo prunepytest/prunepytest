@@ -3,9 +3,10 @@ import tempfile
 
 import pytest
 
+from testfully.util import chdir
 from testfully.validator import validate
 
-from .conftest import TEST_DATA, chdir
+from .conftest import TEST_DATA
 
 
 def test_validator_zeroconf_from_pyext_python() -> None:
