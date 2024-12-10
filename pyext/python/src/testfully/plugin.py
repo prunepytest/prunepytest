@@ -1,14 +1,19 @@
 """
-pytest plugin
+pytest plugin for testfully
+
+includes two parts:
+ - a testcase selector, based on import graph and modified files
+ - a validator to flag unexpected imports, providing confidence that test (de)selection is sound
 """
 
 import os
+import sys
 import warnings
 
 import pathlib
 import pytest
 
-from typing import Any, AbstractSet, Optional, List, Generator
+from typing import Any, AbstractSet, Optional, List, Generator, Tuple
 
 from _pytest._code import Traceback
 from _pytest.config import ExitCode
@@ -37,7 +42,7 @@ except ImportError:
         return False
 
 
-class UnexpectedImportException(Exception):
+class UnexpectedImportException(AssertionError):
     def __init__(self, msg: str):
         super().__init__(msg)
 
@@ -205,7 +210,41 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
+    """
+    Given a pytest Item, return the path of the test file it comes from
+
+    This is usually straightforwardly obtained from item.location[0], but
+    sometimes that location does not point to a covered Python file.
+
+    In that case, we perform a best-effort handling of data-driven tests,
+    by walking up the Item tree, and looking for a parent whose path is
+    a real Python file. If no such file can be found, the test item will
+    be treated safely by testfully, namely:
+
+     - it will never be deselected based on import graph/modified files
+     - import validation will be skipped, since no testfully cannot guess
+       a reasonable set of imports expected for that test item, which
+       would likely result in spurious validation errors
+    """
+    f = item.location[0]
+    if not f.endswith(".py"):
+        p = item.parent
+        while p:
+            if p.name.endswith(".py") and os.path.isfile(p.path):
+                rel = p.path.relative_to(item.config.rootpath)
+                # print(f"mapped {f} -> {rel} {p.path}", file=sys.stderr)
+                return str(rel), f
+            p = p.parent
+    return f, None
+
+
 class GraphLoader:
+    """
+    Helper class to abstract away the loading of the import graph, and deal
+    with some of the intricacies of interfacing with pytest-xdist
+    """
+
     def __init__(
         self, config: pytest.Config, hook: PluginHook, graph_path: str, graph_root: str
     ) -> None:
@@ -243,6 +282,14 @@ class GraphLoader:
 
 
 class TestfullyValidate:
+    """
+    pytest plugin to validate that each test case only imports a subset of the modules
+    that the file it is part of is expected to depend on
+
+    When detecting an unexpected import, an error (or warning, depending on config) will
+    be reported
+    """
+
     def __init__(
         self, hook: PluginHook, graph: GraphLoader, rel_root: pathlib.Path
     ) -> None:
@@ -320,15 +367,31 @@ class TestfullyValidate:
     def pytest_runtest_protocol(
         self, item: pytest.Item, nextitem: pytest.Item
     ) -> Generator[Any, None, None]:
-        # only performa validation on workers when running with xdist...
+        #  when running with xdist, skip validation on controller
         if self.is_controller:
             return (yield)
 
-        f = item.location[0]
+        f, _ = actual_test_file(item)
 
         # TODO: might need further path adjustment?
         graph_path = str(self.rel_root / f) if self.rel_root else f
-        import_path = f[:-3].replace("/", ".")
+        new_file = graph_path != self.current_file
+
+        if new_file:
+            self.current_file = graph_path
+            self.expected_imports = self.graph.get(item.session).file_depends_on(
+                graph_path
+            )
+
+        if not f.endswith(".py") or self.expected_imports is None:
+            # unhandled data-driven test case
+            #  - will never be deselected by testfully
+            #  - validation errors would be spurious as we have no graph coverage...
+            # => skip validation altogether
+            print(f"unhandled test case: {f} [ {item} ]", file=sys.stderr)
+            return (yield)
+
+        # print(f"validated runtest: {f} [ {item} ]", file=sys.stderr)
 
         # keep track of warnings emitted by the import callback, to avoid double-reporting
         warnings_emitted = set()
@@ -344,18 +407,14 @@ class TestfullyValidate:
                 else:
                     raise UnexpectedImportException(f"unexpected import {name}")
 
+        import_path = f[:-3].replace("/", ".")
         # NB: we're registering an import callback so we can immediately fail the
         # test with a clear traceback on the first unexpected import
         self.tracker.enter_context(import_path, import_callback)
 
         before = self.tracker.with_dynamic(import_path)
 
-        if graph_path != self.current_file:
-            self.current_file = graph_path
-            self.expected_imports = (
-                self.graph.get(item.session).file_depends_on(graph_path) or set()
-            )
-
+        if new_file:
             # sanity check: make sure the import graph covers everything that was
             # imported when loading the test file.
             # We only do that for the first test item in each file
@@ -412,6 +471,10 @@ def _report_unexpected(item: pytest.Item, unexpected: AbstractSet[str]) -> None:
 
 
 class TestfullySelect:
+    """
+    pytest plugin to deselect test cases based on import graph and modified files
+    """
+
     def __init__(self, graph: GraphLoader, modified: AbstractSet[str]) -> None:
         self.graph = graph
         self.modified = modified
@@ -423,16 +486,34 @@ class TestfullySelect:
         n = len(items)
         skipped = []
 
-        affected = (
-            self.graph.get(session).affected_by_files(self.modified) | self.modified
-        )
+        g = self.graph.get(session)
+        affected = g.affected_by_files(self.modified) | self.modified
         # print(f"affected: {affected}", file=sys.stderr)
+
+        covered_files = {}
 
         # loop from the end to easily remove items as we go
         i = len(items) - 1
         while i >= 0:
             item = items[i]
-            keep = item.location[0] in affected
+            file, data = actual_test_file(item)
+
+            if file not in covered_files:
+                covered_files[file] = g.file_depends_on(file) is not None
+
+            # keep the test item if any of the following holds:
+            # 1. python test file is not covered by the import graph
+            # 2. python test file is affected by some modified file(s) according to the import graph
+            # 3. data-driven test, and data file was modified
+            #
+            # NB: at a later point, 3. could be extended by allowing explicit tagging of non-code
+            # dependencies with some custom annotation (via comments collected by ModuleGraph, or
+            # import-time hook being triggered a test collection time?)
+            keep = (
+                not covered_files[file]
+                or (file in affected)
+                or (data and data in self.modified)
+            )
             if not keep:
                 skipped.append(item)
                 del items[i]

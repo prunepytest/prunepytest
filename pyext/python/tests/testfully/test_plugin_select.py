@@ -1,3 +1,4 @@
+import os.path
 import pathlib
 
 from _pytest._code import Source
@@ -43,7 +44,9 @@ def test_plugin_select_code(pytester):
     )
 
     pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-modified=blah/stuff.py")
+    result = pytester.runpytest(
+        "--testfully", "--tf-modified=" + os.path.join("blah", "stuff.py")
+    )
     result.assert_outcomes(passed=1)
 
 
@@ -63,7 +66,9 @@ def test_plugin_select_test(pytester):
     )
 
     pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-modified=blah/test_stuff.py")
+    result = pytester.runpytest(
+        "--testfully", "--tf-modified=" + os.path.join("blah", "stuff.py")
+    )
     result.assert_outcomes(passed=1)
 
 
