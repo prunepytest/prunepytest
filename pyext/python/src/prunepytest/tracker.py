@@ -485,11 +485,11 @@ class Tracker:
                     down.update(self.cxt)
                 self.cxt = down
 
-                if has_err and not is_ignored:
-                    # we optimistically added a dependency before resolving the module
-                    # remove it to avoid reporting spurious dependencies
-                    # TODO: track "optional" deps separately?
-                    self.cxt.discard(name)
+            if has_err and not is_ignored:
+                # we optimistically added a dependency before resolving the module
+                # remove it to avoid reporting spurious dependencies
+                # TODO: track "optional" deps separately?
+                self.cxt.discard(name)
 
     def add_dynamic_usage_recorder(
         self, module: types.ModuleType, module_name: str, fn_name: str
