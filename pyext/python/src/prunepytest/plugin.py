@@ -393,6 +393,11 @@ class PruneValidator:
             print(f"unhandled test case: {f} [ {item} ]", file=sys.stderr)
             return (yield)
 
+        import_path = f[:-3].replace("/", ".")
+
+        # avoid spurious validation errors when using multiprocessing
+        self.expected_imports |= {import_path}
+
         # print(f"validated runtest: {f} [ {item} ]", file=sys.stderr)
 
         # keep track of warnings emitted by the import callback, to avoid double-reporting
@@ -409,7 +414,6 @@ class PruneValidator:
                 else:
                     raise UnexpectedImportException(f"unexpected import {name}")
 
-        import_path = f[:-3].replace("/", ".")
         # NB: we're registering an import callback so we can immediately fail the
         # test with a clear traceback on the first unexpected import
         self.tracker.enter_context(import_path, import_callback)
