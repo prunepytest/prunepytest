@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
 """
-Usage: python -m testfully.validator <path/to/hook.py> [<path/to/serialized/graph>]
+Usage: python -m prunepytest.validator <path/to/hook.py> [<path/to/serialized/graph>]
 
 Purpose:
 
-This file is part of a multi-prong system to validate the soundness of testfully
+This file is part of a multi-prong system to validate the soundness of prunepytest
 for a given codebase.
 
 Specifically, it is concerned with validating that the transitive closure
@@ -29,7 +29,7 @@ at run time! We deal with that as follows:
    (i.e. triggered by a module-level statement). This is good as it shows
    blind spots in the rust parser and gives us an opportunity to make those
    dynamic dependencies explicit. This is useful as a first pass before
-   attempting to actually run tests under testfully as it gives quicker,
+   attempting to actually run tests under prunepytest as it gives quicker,
    though less accurate, feedback on the use of dynamic dependencies.
 
  - the pytest plugin tracks imports while tests are actually running, and
@@ -303,7 +303,7 @@ if __name__ == "__main__":
             sys.exit(2)
 
     # TODO: support override from hook
-    from testfully import configure_logger
+    from . import configure_logger
 
     configure_logger("/dev/stdout", "info")
 

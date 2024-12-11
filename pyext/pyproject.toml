@@ -3,7 +3,7 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "testfully"
+name = "prunepytest"
 description = "only test relevant files"
 requires-python = ">=3.7"
 authors = [
@@ -26,16 +26,16 @@ classifiers = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/huguesb/testfully"
-Respository = "https://github.com/huguesb/testfully.git"
-Issues = "https://github.com/huguesb/testfully/issues"
+Homepage = "https://github.com/taste-prune-pie/prune-py-test"
+Respository = "https://github.com/taste-prune-pie/prune-py-test.git"
+Issues = "https://github.com/taste-prune-pie/prune-py-test/issues"
 
 [project.entry-points.pytest11]
-testfully = "testfully.plugin"
+prunepytest = "prunepytest.plugin"
 
 [tool.maturin]
 python-source = "python/src"
-module-name = "testfully._testfully"
+module-name = "prunepytest._prunepytest"
 # Control the platform tag on linux
 compatibility = "manylinux2014"
 # auditwheel mode, possible values are repair, check and skip

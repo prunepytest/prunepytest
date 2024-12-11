@@ -24,8 +24,7 @@ from typing import (
     Union,
 )
 
-
-import testfully
+from . import __path__ as _pkg_path
 
 
 IGNORED_FRAMES = {
@@ -38,7 +37,7 @@ IGNORED_FRAMES = {
 def warning_skip_level() -> int:
     """
     Compute the correct value of stacklevel to pass to warnings.warn in order
-    to skip all testfully frames and point directly at the location of an
+    to skip all internal frames and point directly at the location of an
     unexpected import, when called from a Tracker import_callback
 
     NB: this might not be 100% accurate if other code hooks into the import machinery
@@ -48,7 +47,7 @@ def warning_skip_level() -> int:
     skip = 1
     while True:
         f = sys._getframe(lvl)
-        if f.f_code.co_filename.startswith(tuple(testfully.__path__)):
+        if f.f_code.co_filename.startswith(tuple(_pkg_path)):
             skip += 1
         elif not warnings._is_internal_frame(f):  # type: ignore[attr-defined]
             break

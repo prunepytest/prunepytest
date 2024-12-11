@@ -5,8 +5,8 @@ import tempfile
 
 import pytest
 
-from testfully.util import chdir
-from testfully.validator import validate
+from prunepytest.util import chdir
+from prunepytest.validator import validate
 
 from .conftest import TEST_DATA
 
@@ -58,7 +58,7 @@ def test_validator_zeroconf_with_graph() -> None:
 
 
 ZEROCONF_HOOK_PY = """
-from testfully.api import ZeroConfHook
+from prunepytest.api import ZeroConfHook
 
 def foo():
     pass
@@ -85,17 +85,17 @@ def test_validator_with_custom_zeroconf_hook() -> None:
 
 
 HOOK_PY = """
-from testfully.api import ValidatorHook
+from prunepytest.api import ValidatorHook
 
 class TestHook(ValidatorHook):
     def global_namespaces(self):
-        return {"testfully"}
+        return {"prunepytest"}
 
     def local_namespaces(self):
         return {"tests"}
 
     def source_roots(self):
-        return {"src/testfully": "testfully", "tests": "tests"}
+        return {"src/prunepytest": "prunepytest", "tests": "tests"}
 
     def test_folders(self):
         return {"tests": "tests"}
@@ -116,7 +116,7 @@ def test_validator_with_custom_hook() -> None:
 
 
 INVALID_HOOK_PY = """
-from testfully.api import ValidatorHook
+from prunepytest.api import ValidatorHook
 
 class StillAbstract(ValidatorHook):
     pass
@@ -137,7 +137,7 @@ def test_validator_invalid_hook() -> None:
 
 
 MISSING_HOOK_PY = """
-from testfully.api import ValidatorHook
+from prunepytest.api import ValidatorHook
 
 """
 

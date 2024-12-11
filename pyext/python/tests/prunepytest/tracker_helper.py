@@ -3,7 +3,7 @@
 import io
 import sys
 
-from testfully.tracker import Tracker
+from prunepytest.tracker import Tracker
 from typing import AbstractSet, Mapping, cast
 
 

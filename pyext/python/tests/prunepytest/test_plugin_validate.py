@@ -3,7 +3,7 @@
 import pathlib
 
 from _pytest._code import Source
-from testfully.util import load_import_graph, hook_zeroconf
+from prunepytest.util import load_import_graph, hook_zeroconf
 
 
 def write_text(path, content):
@@ -18,8 +18,8 @@ def test_fail_static_test_file_not_in_graph(pytester):
             import blah
         """
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select")
     result.assert_outcomes(passed=1)
 
 
@@ -31,8 +31,8 @@ def test_warn_static_test_file_not_in_graph(pytester):
             import blah
         """
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect", "--tf-warnonly")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select", "--prune-no-fail")
     result.assert_outcomes(passed=1)
 
 
@@ -44,8 +44,8 @@ def test_fail_dynamic_test_file_not_in_graph(pytester):
             __import__('blah')
         """
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select")
     result.assert_outcomes(passed=1)
 
 
@@ -57,8 +57,8 @@ def test_warn_dynamic_test_file_not_in_graph(pytester):
             __import__('blah')
         """
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect", "--tf-warnonly")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select", "--prune-no-fail")
     result.assert_outcomes(passed=1)
 
 
@@ -76,8 +76,8 @@ def test_succeed_test_file_in_graph_static_import(pytester):
              import blah.stuff
         """,
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select")
     result.assert_outcomes(passed=1)
 
 
@@ -95,8 +95,8 @@ def test_fail_test_file_in_graph_dynamic_import(pytester):
              __import__('blah.stuff')
         """,
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select")
     result.assert_outcomes(failed=1)
 
 
@@ -114,8 +114,8 @@ def test_warn_test_file_in_graph_dynamic_import(pytester):
              __import__('blah.stuff')
         """,
     )
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect", "--tf-warnonly")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select", "--prune-no-fail")
     result.assert_outcomes(passed=1, warnings=1)
 
 
@@ -137,6 +137,8 @@ def test_load_existing_graph(pytester):
     hook = hook_zeroconf(pytester.path)
     load_import_graph(hook).to_file("graph.bin")
 
-    pytester.plugins = ["testfully"]
-    result = pytester.runpytest("--testfully", "--tf-noselect", "--tf-graph=graph.bin")
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest(
+        "--prune", "--prune-no-select", "--prune-graph=graph.bin"
+    )
     result.assert_outcomes(passed=1)

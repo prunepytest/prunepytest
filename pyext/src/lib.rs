@@ -32,7 +32,7 @@ where
     }
 }
 
-#[pyclass(subclass, module = "testfully")]
+#[pyclass(subclass, module = "prunepytest")]
 pub struct ModuleGraph {
     tc: TransitiveClosure,
 }
@@ -235,7 +235,7 @@ fn file_looks_like_pkgutil_ns_init(file: String) -> PyResult<bool> {
 }
 
 #[pymodule]
-fn _testfully(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _prunepytest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ModuleGraph>()?;
     m.add_function(wrap_pyfunction!(configure_logger, m)?)?;
     m.add_function(wrap_pyfunction!(file_looks_like_pkgutil_ns_init, m)?)?;

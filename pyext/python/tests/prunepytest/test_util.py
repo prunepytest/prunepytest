@@ -2,7 +2,7 @@
 
 import os.path
 
-from testfully.util import infer_ns_pkg, find_package_roots, hook_zeroconf
+from prunepytest.util import infer_ns_pkg, find_package_roots, hook_zeroconf
 
 from .conftest import TEST_DATA
 
@@ -56,14 +56,14 @@ def test_find_package_roots() -> None:
     python_dir = TEST_DATA.parent
     assert (
         find_package_roots(python_dir)
-        == {python_dir / "src/testfully", python_dir / "tests"}
+        == {python_dir / "src/prunepytest", python_dir / "tests"}
         | expected_test_data_dirs
     )
 
     pyext_dir = python_dir.parent
     assert (
         find_package_roots(pyext_dir)
-        == {python_dir / "src/testfully", python_dir / "tests"}
+        == {python_dir / "src/prunepytest", python_dir / "tests"}
         | expected_test_data_dirs
     )
 
@@ -72,10 +72,10 @@ def test_hook_zeroconf() -> None:
     python_dir = TEST_DATA.parent
     hook = hook_zeroconf(python_dir)
 
-    assert hook.global_namespaces() == {"testfully"} | expected_test_data_pkg
+    assert hook.global_namespaces() == {"prunepytest"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
     assert hook.source_roots() == {
-        os.path.join("src", "testfully"): "testfully",
+        os.path.join("src", "prunepytest"): "prunepytest",
         "tests": "tests",
         os.path.join("test-data", "ns", "ns2", "normal"): "ns.ns2.normal",
         **{
@@ -89,10 +89,10 @@ def test_hook_zeroconf() -> None:
     pyext_dir = python_dir.parent
     hook = hook_zeroconf(pyext_dir)
 
-    assert hook.global_namespaces() == {"testfully"} | expected_test_data_pkg
+    assert hook.global_namespaces() == {"prunepytest"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
     assert hook.source_roots() == {
-        os.path.join("python", "src", "testfully"): "testfully",
+        os.path.join("python", "src", "prunepytest"): "prunepytest",
         os.path.join("python", "tests"): "tests",
         os.path.join("python", "test-data", "ns", "ns2", "normal"): "ns.ns2.normal",
         **{

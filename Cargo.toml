@@ -5,9 +5,9 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 rust-version = "1.82"
-homepage = "https://github.com/huguesb/testfully"
-documentation = "https://github.com/huguesb/testfully"
-repository = "https://github.com/huguesb/testfully"
+homepage = "https://github.com/taste-prune-pie/prune-py-test"
+documentation = "https://github.com/taste-prune-pie/prune-py-test"
+repository = "https://github.comtaste-prune-pie/prune-py-test"
 authors = ["Hugues Bruant <hugues.bruant@gmail.com>"]
 
 [workspace.dependencies]

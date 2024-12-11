@@ -9,7 +9,7 @@ documentation = { workspace = true }
 repository = { workspace = true }
 
 [lib]
-name = "testfully"
+name = "prunepytest"
 crate-type = ["cdylib"]
 
 [dependencies]

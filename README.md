@@ -1,7 +1,6 @@
-testfully
-=========
+prune-py-test
+=============
 
-Test Python code fully, but tastefully, by only running relevant tests that are actually affected by a given change.
+Safely prune the set of Python test to be run, based on module-granularity import graph.
 
-Test selection is based on a module-level import graph.
 

@@ -55,7 +55,7 @@ jobs:
         if: matrix.platform.target == 'x86_64'
         working-directory: pyext
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
           ./runtests.sh
 
   linux-extra-test:
@@ -83,7 +83,7 @@ jobs:
         if: matrix.platform.target == 'x86_64'
         working-directory: pyext
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
           ./runtests.sh
       - uses: uraimo/run-on-arch-action@v2.8.1
         name: pytest-docker
@@ -102,7 +102,7 @@ jobs:
           run: |
             set -e
             cd pyext
-            export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+            export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
             ./runtests.sh
 
   windows:
@@ -140,7 +140,7 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           python3 -m venv .venv --symlinks
           .venv\Scripts\Activate.ps1
-          python -m pip install --find-links dist --no-index --force-reinstall testfully
+          python -m pip install --find-links dist --no-index --force-reinstall prunepytest
           python -m pip install pytest
           python -m pytest --rootdir python
 
@@ -174,7 +174,7 @@ jobs:
       - name: pytest
         working-directory: pyext
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall testfully"
+          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
           ./runtests.sh
 
 

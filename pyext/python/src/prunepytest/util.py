@@ -106,7 +106,7 @@ def infer_ns_pkg(
 ) -> Tuple[pathlib.PurePath, str]:
     # walk down until first __init__.py without recognizable ns extend stanza
 
-    from testfully import file_looks_like_pkgutil_ns_init
+    from . import file_looks_like_pkgutil_ns_init
 
     ns = pkgroot.name
     first_non_ns = root / pkgroot if root else pkgroot
@@ -215,7 +215,7 @@ def hook_zeroconf(
 
 # NB: base_cls can be abstract, ignore mypy warnings at call site...
 def load_hook(root: pathlib.Path, hook: str, base_cls: Type[Hook_T]) -> Hook_T:
-    hook_mod_name = "testfully._hook"
+    hook_mod_name = "prunepytest._hook"
     hook_mod = import_file(hook_mod_name, str(root / hook))
 
     for name, val in hook_mod.__dict__.items():

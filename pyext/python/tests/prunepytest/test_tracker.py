@@ -9,7 +9,7 @@ from importlib import __import__ as importlib_import
 from importlib import import_module
 
 from .tracker_helper import CleanImportTrackerContext
-from testfully.tracker import Tracker
+from prunepytest.tracker import Tracker
 
 
 def test_import_statement() -> None:

@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
 """
-pytest plugin for testfully
+pytest plugin for prune-py-test
 
 includes two parts:
- - a testcase selector, based on import graph and modified files
+ - a test case selector, based on import graph and modified files
  - a validator to flag unexpected imports, providing confidence that test (de)selection is sound
 """
 
@@ -23,12 +23,10 @@ from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
 from _pytest.tmpdir import TempPathFactory
 
-from testfully.tracker import relevant_frame_index, warning_skip_level
-
 from . import ModuleGraph
 from .api import PluginHook, ZeroConfHook
 from .util import chdir, load_import_graph, load_hook, hook_zeroconf
-from .tracker import Tracker
+from .tracker import Tracker, relevant_frame_index, warning_skip_level
 from .vcs.detect import detect_vcs
 
 
@@ -55,79 +53,81 @@ def raise_(e: BaseException) -> None:
 
 def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     group = parser.getgroup(
-        "automatically select tests affected by changes (testfully)"
+        "automatically select tests affected by changes (prune-py-test)"
     )
 
     group.addoption(
-        "--testfully",
+        "--prune",
         action="store_true",
-        dest="testfully",
-        help=("Select tests affected by changes (based on import graph)."),
+        dest="prune",
+        help=("Enable prune-py-test plugin"),
     )
 
     group.addoption(
-        "--tf-noselect",
+        "--prune-no-validate",
         action="store_true",
-        dest="testfully_noselect",
-        help=("Keep default test selection, instead of pruning irrelevant tests"),
-    )
-
-    group.addoption(
-        "--tf-modified",
-        action="store",
-        type=str,
-        dest="testfully_modified",
+        dest="prune_novalidate",
         help=(
-            "Comma-separated list of modified files to use as basis for test selection."
-            "The default behavior is to use data from the last git (or other supported VCS)"
-            "commit, and uncommitted changes."
-            "If specified, takes precedence over --tf-base-commit"
+            "Skip validation that each tests only imports modules predicted by the import graph"
         ),
     )
 
     group.addoption(
-        "--tf-base-commit",
+        "--prune-no-select",
+        action="store_true",
+        dest="prune_noselect",
+        help=("Keep default test selection, disable pruning irrelevant tests"),
+    )
+
+    group.addoption(
+        "--prune-modified-files",
         action="store",
         type=str,
-        dest="testfully_base_commit",
+        dest="prune_modified_files",
+        help=(
+            "Comma-separated list of modified files to use as basis for test selection."
+            "The default behavior is to use data from the last git (or other supported VCS)"
+            "commit, and uncommitted changes."
+            "If specified, takes precedence over --base-commit"
+        ),
+    )
+
+    group.addoption(
+        "--prune-base-commit",
+        action="store",
+        type=str,
+        dest="prune_base_commit",
         help=("Base commit id to use when computing affected files."),
     )
 
     group.addoption(
-        "--tf-novalidate",
+        "--prune-no-fail",
         action="store_true",
-        dest="testfully_novalidate",
-        help=("Skip validation of dynamic imports"),
-    )
-
-    group.addoption(
-        "--tf-warnonly",
-        action="store_true",
-        dest="testfully_warnonly",
+        dest="prune_nofail",
         help=("Only warn, instead of failing tests that trigger unexpected imports"),
     )
 
     group.addoption(
-        "--tf-hook",
+        "--prune-hook",
         action="store",
         type=str,
-        dest="testfully_hook",
-        help=("File containing an implementation of testfully.api.PluginHook"),
+        dest="prune_hook",
+        help=("File containing an implementation of prunepytest.api.PluginHook"),
     )
 
     group.addoption(
-        "--tf-graph-root",
+        "--prune-graph-root",
         action="store",
         type=str,
-        dest="testfully_graph_root",
+        dest="prune_graph_root",
         help=("Root path, to which all paths in the import graph are relative"),
     )
 
     group.addoption(
-        "--tf-graph",
+        "--prune-graph",
         action="store",
         type=str,
-        dest="testfully_graph",
+        dest="prune_graph",
         help=(
             "Path to an existing serialized import graph"
             "to be used, instead of computing a fresh one."
@@ -137,7 +137,7 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     opt = config.option
-    if not opt.testfully:
+    if not opt.prune:
         return
 
     # Skip this plugin entirely when only doing collection.
@@ -148,21 +148,21 @@ def pytest_configure(config: pytest.Config) -> None:
     import pluggy  # type: ignore[import-untyped]
 
     if pluggy.__version__ < "1.2":
-        raise ValueError("testfully requires pluggy>=1.2")
+        raise ValueError("prune-py-test requires pluggy>=1.2")
 
-    if opt.testfully_hook:
-        hook = load_hook(config.rootpath, opt.testfully_hook, PluginHook)  # type: ignore[type-abstract]
+    if opt.prune_hook:
+        hook = load_hook(config.rootpath, opt.prune_hook, PluginHook)  # type: ignore[type-abstract]
     else:
         hook = hook_zeroconf(config.rootpath, ZeroConfHook)
 
     vcs = detect_vcs()
 
-    graph_root = opt.testfully_graph_root or (
+    graph_root = opt.prune_graph_root or (
         vcs.repo_root() if vcs else str(config.rootpath)
     )
     rel_root = config.rootpath.relative_to(graph_root)
 
-    graph_path = opt.testfully_graph
+    graph_path = opt.prune_graph
     if graph_path and not os.path.isfile(graph_path):
         graph_path = None
 
@@ -174,7 +174,7 @@ def pytest_configure(config: pytest.Config) -> None:
             tmpdir: pathlib.Path = TempPathFactory.from_config(
                 config, _ispytest=True
             ).getbasetemp()
-            graph_path = str(tmpdir / "tf-graph.bin")
+            graph_path = str(tmpdir / "prune-graph.bin")
 
         # use xdist hooks to propagate the path to all workers
         class XdistConfig:
@@ -183,22 +183,22 @@ def pytest_configure(config: pytest.Config) -> None:
                 # print(f"configure node {node.workerinput['workerid']}: graph_path={graph_path}")
                 node.workerinput["graph_path"] = graph_path
 
-        config.pluginmanager.register(XdistConfig(), "testfully_xdist_config")
+        config.pluginmanager.register(XdistConfig(), "PruneXdistConfig")
 
     graph = GraphLoader(config, hook, graph_path, graph_root)
 
-    if not opt.testfully_novalidate:
+    if not opt.prune_novalidate:
         config.pluginmanager.register(
-            TestfullyValidate(hook, graph, rel_root),
-            "TestfullyValidate",
+            PruneValidator(hook, graph, rel_root),
+            "PruneValidator",
         )
 
-    if not opt.testfully_noselect:
-        if opt.testfully_modified is not None:
-            modified = opt.testfully_modified.split(",")
+    if not opt.prune_noselect:
+        if opt.prune_modified_files is not None:
+            modified = opt.prune_modified_files.split(",")
         elif vcs:
             modified = (
-                vcs.modified_files(base_commit=opt.testfully_base_commit)
+                vcs.modified_files(base_commit=opt.prune_base_commit)
                 + vcs.dirty_files()
             )
         else:
@@ -207,8 +207,8 @@ def pytest_configure(config: pytest.Config) -> None:
         print(f"modified: {modified}")
 
         config.pluginmanager.register(
-            TestfullySelect(graph, set(modified)),
-            "TestfullySelect",
+            PruneSelector(graph, set(modified)),
+            "PruneSelector",
         )
 
 
@@ -222,12 +222,12 @@ def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
     In that case, we perform a best-effort handling of data-driven tests,
     by walking up the Item tree, and looking for a parent whose path is
     a real Python file. If no such file can be found, the test item will
-    be treated safely by testfully, namely:
+    be treated safely:
 
-     - it will never be deselected based on import graph/modified files
-     - import validation will be skipped, since no testfully cannot guess
-       a reasonable set of imports expected for that test item, which
-       would likely result in spurious validation errors
+     - it is never be deselected based on import graph/modified files
+     - import validation is skipped, since we cannot infer a reasonable
+       set of imports for that test item, and we want to avoid spurious
+       validation errors
     """
     f = item.location[0]
     if not f.endswith(".py"):
@@ -283,9 +283,9 @@ class GraphLoader:
         return graph
 
 
-class TestfullyValidate:
+class PruneValidator:
     """
-    pytest plugin to validate that each test case only imports a subset of the modules
+    pytest hooks to validate that each test case only imports a subset of the modules
     that the file it is part of is expected to depend on
 
     When detecting an unexpected import, an error (or warning, depending on config) will
@@ -387,7 +387,7 @@ class TestfullyValidate:
 
         if not f.endswith(".py") or self.expected_imports is None:
             # unhandled data-driven test case
-            #  - will never be deselected by testfully
+            #  - will never be deselected
             #  - validation errors would be spurious as we have no graph coverage...
             # => skip validation altogether
             print(f"unhandled test case: {f} [ {item} ]", file=sys.stderr)
@@ -400,7 +400,7 @@ class TestfullyValidate:
 
         def import_callback(name: str) -> None:
             if not self.expected_imports or name not in self.expected_imports:
-                if item.session.config.option.testfully_warnonly:
+                if item.session.config.option.prune_nofail:
                     # stack munging: we want the warning to point to the unexpected import location
                     skip = warning_skip_level()
 
@@ -444,7 +444,7 @@ class TestfullyValidate:
 
 
 def _report_unexpected(item: pytest.Item, unexpected: AbstractSet[str]) -> None:
-    if item.session.config.option.testfully_warnonly:
+    if item.session.config.option.prune_nofail:
         f = item.location[0]
         item.session.ihook.pytest_warning_recorded.call_historic(
             kwargs=dict(
@@ -472,9 +472,9 @@ def _report_unexpected(item: pytest.Item, unexpected: AbstractSet[str]) -> None:
         item.ihook.pytest_runtest_logreport(report=report)
 
 
-class TestfullySelect:
+class PruneSelector:
     """
-    pytest plugin to deselect test cases based on import graph and modified files
+    pytest hooks to deselect test cases based on import graph and modified files
     """
 
     def __init__(self, graph: GraphLoader, modified: AbstractSet[str]) -> None:
