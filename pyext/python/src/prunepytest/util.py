@@ -200,6 +200,8 @@ def hook_zeroconf(
     # TODO: also check pytest.ini?
     tst_paths = toml_xtract(pyproj, "tool.pytest.ini_options.testpaths")
     if tst_paths:
+        if not isinstance(tst_paths, list):
+            tst_paths = [tst_paths]
         print(f"use testpaths from pyproject.toml: {tst_paths}")
         # TODO: ensure that those are included in source roots
         # TODO: merge instead of overriding?
