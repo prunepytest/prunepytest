@@ -620,20 +620,15 @@ fn reify_deps(g: &DashMap<ModuleRef, HashSet<ModuleRef>>, ref_cache: &mut Module
         let mut idx = module.py.rfind('.');
         while idx.is_some() {
             let parent = ustr(&module.py[..idx.unwrap()]);
-            if let Some(pref) = match ref_cache.ref_for_py(parent, module.pkg) {
-                Some(pref) => Some(pref),
-                None => {
-                    if module.pkg.is_none() {
-                        Some(ref_cache.get_or_create(ustr(""), parent, None))
-                    } else {
-                        None
-                    }
-                }
-            } {
-                let pmod = ref_cache.get(pref);
-                assert_eq!(pmod.pkg, module.pkg);
-                deps.insert(pref);
-            }
+            let pref = ref_cache
+                .ref_for_py(parent, module.pkg)
+                // create ref for implicit namespace package
+                // we need this because Python will create implicit namespaces,
+                // and they will show up in the import tracker when validating
+                .unwrap_or_else(|| ref_cache.get_or_create(ustr(""), parent, module.pkg));
+            let pmod = ref_cache.get(pref);
+            assert_eq!(pmod.pkg, module.pkg);
+            deps.insert(pref);
             idx = parent.rfind('.');
         }
         n += 1;

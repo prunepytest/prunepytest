@@ -143,8 +143,12 @@ impl ModuleRefCache {
     pub fn get_or_create(&mut self, fs: Ustr, py: Ustr, pkg: Option<Ustr>) -> ModuleRef {
         assert!(!py.contains(MAIN_SEPARATOR), "{} {}", fs, py);
         if fs.is_empty() {
-            assert!(pkg.is_none());
-            if let Some(r) = self.py_to_ref_global.get(&py) {
+            // namespace package, either implicit or explicit
+            // since there can be multiple __init__.py, we don't record any
+            if let Some(r) = match pkg {
+                None => self.py_to_ref_global.get(&py),
+                Some(p) => self.py_to_ref_local.get(&p).and_then(|m| m.get(&py)),
+            } {
                 return *r;
             }
         } else if let Some(r) = self.fs_to_ref.get(&fs) {
