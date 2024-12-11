@@ -92,7 +92,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cmd"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "common",
  "dashmap",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "dashmap",
  "hi_sparse_bitset",
@@ -446,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "pyext"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "common",
  "fern",
