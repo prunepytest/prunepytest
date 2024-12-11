@@ -29,6 +29,7 @@ from . import __path__ as _pkg_path
 
 IGNORED_FRAMES = {
     __file__,
+    importlib.__file__,
     "<frozen importlib._bootstrap>",
     "<frozen importlib._bootstrap_external>",
 }
