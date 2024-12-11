@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 use crate::matcher::MatcherNode;
 use crate::moduleref::{LockedModuleRefCache, ModuleRef, ModuleRefCache};
 use crate::parser;

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 use log::ParseLevelError;
 use pyo3::exceptions::{PyException, PyTypeError};
 use pyo3::marker::Ungil;

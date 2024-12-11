@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 """
 Usage: python -m testfully.validator <path/to/hook.py> [<path/to/serialized/graph>]
 

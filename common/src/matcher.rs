@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 use std::collections::HashMap;
 
 pub struct MatcherNode {

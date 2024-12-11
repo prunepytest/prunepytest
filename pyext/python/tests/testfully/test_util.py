@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 import os.path
 
 from testfully.util import infer_ns_pkg, find_package_roots, hook_zeroconf

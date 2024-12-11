@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 from typing import Mapping, AbstractSet, Optional, Sequence, Tuple, Union
 
 class ModuleGraph:

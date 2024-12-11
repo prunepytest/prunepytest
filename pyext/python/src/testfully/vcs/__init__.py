@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 from abc import ABC, abstractmethod
 from typing import List, Optional
 

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 import pathlib
 
 from _pytest._code import Source

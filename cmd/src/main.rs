@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 use common::graph::*;
 use common::transitive_closure::TransitiveClosure;
 use std::collections::{HashMap, HashSet};

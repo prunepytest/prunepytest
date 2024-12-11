@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 use speedy::private::{read_length_u64_varint, write_length_u64_varint};
 use speedy::{Context, Readable, Reader, Writable, Writer};
 use std::collections::HashMap;

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 import os
 from abc import ABC, abstractmethod, ABCMeta
 from fnmatch import fnmatch

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
 use crate::moduleref::{
     read_ustr_with_buf, write_ustr_to, ModuleRef, ModuleRefCache, ModuleRefVal,
 };
