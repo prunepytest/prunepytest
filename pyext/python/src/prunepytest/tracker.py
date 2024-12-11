@@ -361,8 +361,7 @@ class Tracker:
     def _find_and_load_helper(self, name: str, import_: Any, is_ignored: bool) -> Any:
         new_context = False
         if not is_ignored:
-            if self.import_callback:
-                self.import_callback(name)
+            # NB: defer import callback until successful import below
             self.cxt.add(name)
             if self.log_file:
                 flag = (
@@ -433,6 +432,14 @@ class Tracker:
             # apply any necessary patches immediately after loading module
             if self.patches is not None and name in self.patches:
                 apply_patches(name, self.patches)
+
+            # NB: we only want to notify the callback if the import was successful
+            # on failed import we roll-back the addition to cxt further down
+            # NB: we skip the callback for implicit __init__.py for namespace
+            # packages, as those do not contain any imports, and ModuleGraph will
+            # not have a reference to them
+            if self.import_callback:
+                self.import_callback(name)
 
             # parent __init__ are implicitly resolved, but sys.modules is
             # checked *before* calling _gcd_import so our _find_and_load
