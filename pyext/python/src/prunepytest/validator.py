@@ -286,13 +286,13 @@ if __name__ == "__main__":
     hook_path = None
     graph_path = None
     while i < len(sys.argv):
-        if sys.argv[i] in {"--hook", "-h"}:
+        if sys.argv[i] in {"--prune-hook", "--hook", "-h"}:
             if len(sys.argv) < i + 2:
                 print(f"missing value for {sys.argv[i]} argument")
                 sys.exit(2)
             hook_path = sys.argv[i + 1]
             i += 2
-        elif sys.argv[i] in {"--graph", "-g"}:
+        elif sys.argv[i] in {"--prune-graph", "--graph", "-g"}:
             if len(sys.argv) < i + 2:
                 print(f"missing value for {sys.argv[i]} argument")
                 sys.exit(2)
