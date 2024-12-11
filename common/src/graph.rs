@@ -538,13 +538,56 @@ impl ModuleGraph {
         }
     }
 
+    fn first_matching_ref(&self, m: &str) -> Option<ModuleRef> {
+        self.modules_refs
+            .ref_for_fs(ustr(m))
+            .or_else(|| self.modules_refs.ref_for_py(ustr(m), None))
+            .or_else(|| {
+                for (fs, py) in &self.source_roots {
+                    if !m.starts_with(py) {
+                        continue;
+                    }
+                    let x = self.modules_refs.ref_for_py(ustr(m), Some(ustr(fs)));
+                    if x.is_some() {
+                        return x;
+                    }
+                }
+                None
+            })
+    }
+
     pub fn add_dynamic_dependencies(&self, dynamic_edges: HashMap<String, HashSet<String>>) {
         for (m, deps) in dynamic_edges {
-            if let Some(r) = self.modules_refs.ref_for_py(ustr(&m), None) {
-                let rdeps = deps.iter().filter_map(|d| self.module_or_parent(d));
-                self.global_ns.get_mut(&r).unwrap().extend(rdeps);
+            if let Some(r) = self.first_matching_ref(&m) {
+                debug!("dynamic dep: {} -> {} +{:?}", m, r, deps);
+                self.add_dynamic_dep(r, deps);
+            } else {
+                warn!("dynamic dep: {} not found", m);
             }
         }
+    }
+
+    fn add_dynamic_dep(&self, r: ModuleRef, deps: HashSet<String>) {
+        let mut cur_deps = self.global_ns.get_mut(&r).unwrap();
+        deps.iter().for_each(|dep| {
+            if dep.ends_with(".*") {
+                let dep_prefix = &dep[..dep.len() - 1];
+                info!("dynamic wildcard: {}", dep_prefix);
+                // TODO: more efficient prefix search?
+                // probably overkill for now...
+                for mod_ref in 0..self.modules_refs.max_value() {
+                    let mod_py = self.modules_refs.py_for_ref(mod_ref);
+                    if let Some(suffix) = mod_py.strip_prefix(dep_prefix) {
+                        if !suffix.contains('.') {
+                            info!(" > wildcard match: {}", mod_py);
+                            cur_deps.insert(mod_ref);
+                        }
+                    }
+                }
+            } else if let Some(mod_ref) = self.module_or_parent(dep) {
+                cur_deps.insert(mod_ref);
+            }
+        })
     }
 
     pub fn finalize(self) -> TransitiveClosure {
