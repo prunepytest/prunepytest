@@ -426,7 +426,7 @@ class Tracker:
 
             # maintain a mapping of file path to module name
             # this is later used to map filepath from stack frame to module
-            if hasattr(m, "__file__"):
+            if getattr(m, "__file__", None):
                 self.file_to_module[m.__file__] = name
 
             # apply any necessary patches immediately after loading module
