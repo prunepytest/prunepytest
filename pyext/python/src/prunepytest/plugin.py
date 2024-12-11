@@ -152,6 +152,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     if opt.prune_hook:
         hook = load_hook(config.rootpath, opt.prune_hook, PluginHook)  # type: ignore[type-abstract]
+        hook.setup()
     else:
         hook = hook_zeroconf(config.rootpath, ZeroConfHook)
 
