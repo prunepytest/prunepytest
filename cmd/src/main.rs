@@ -45,7 +45,7 @@ fn main() {
             );
 
             module_graph
-                .parse_parallel()
+                .parse_parallel(false)
                 .expect("failed to parse module graph");
 
             eprintln!(

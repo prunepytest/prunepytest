@@ -24,6 +24,9 @@ class BaseHook(ABC):
     @abstractmethod
     def source_roots(self) -> Mapping[str, str]: ...
 
+    def include_typechecking(self) -> bool:
+        return False
+
     def external_imports(self) -> AbstractSet[str]:
         return frozenset()
 

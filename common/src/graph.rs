@@ -384,7 +384,7 @@ impl ModuleGraph {
         }
     }
 
-    pub fn parse_parallel(&self) -> Result<(), parser::Error> {
+    pub fn parse_parallel(&self, include_typechecking: bool) -> Result<(), parser::Error> {
         let parallelism = thread::available_parallelism().unwrap().get();
 
         let mut package_it = self.source_roots.keys();
@@ -419,7 +419,7 @@ impl ModuleGraph {
                             .unwrap();
                         WalkState::Quit
                     }
-                    Ok(e) => self.parse_one_file(e, &tx),
+                    Ok(e) => self.parse_one_file(e, include_typechecking, &tx),
                 })
             });
 
@@ -494,7 +494,12 @@ impl ModuleGraph {
         }
     }
 
-    fn parse_one_file(&self, e: DirEntry, tx: &mpsc::Sender<parser::Error>) -> WalkState {
+    fn parse_one_file(
+        &self,
+        e: DirEntry,
+        include_typechecking: bool,
+        tx: &mpsc::Sender<parser::Error>,
+    ) -> WalkState {
         let filename = e.file_name().to_str().unwrap();
         if !filename.ends_with(".py") {
             return WalkState::Continue;
@@ -511,7 +516,7 @@ impl ModuleGraph {
         // NB: preserve __init__ for correct relative import resolution
         let module = module[..module.len() - 3].replace(MAIN_SEPARATOR, ".");
 
-        match raw_get_all_imports(filepath, &module, true) {
+        match raw_get_all_imports(filepath, &module, true, include_typechecking) {
             Ok((is_ns_pkg_init, imports)) => {
                 // rip out the __init__ bit now that we've dealt with any relative imports
                 let mut module: &str = &module;

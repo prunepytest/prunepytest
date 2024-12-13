@@ -62,8 +62,9 @@ def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph
             hook.source_roots(),
             hook.global_namespaces(),  # unified namespace
             hook.local_namespaces(),  # per-pkg namespace
-            hook.external_imports() | {"importlib", "__import__"},
-            hook.dynamic_dependencies(),
+            external_prefixes=hook.external_imports() | {"importlib", "__import__"},
+            dynamic_deps=hook.dynamic_dependencies(),
+            include_typechecking=hook.include_typechecking(),
         )
 
         unresolved = g.unresolved()

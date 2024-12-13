@@ -46,16 +46,23 @@ struct ImportExtractor<'a> {
     source: &'a str,
     module: &'a str,
     deep: bool,
+    include_typechecking: bool,
 
     imports: Vec<String>,
 }
 
 impl<'a> ImportExtractor<'a> {
-    fn new(source: &'a str, module: &'a str, deep: bool) -> ImportExtractor<'a> {
+    fn new(
+        source: &'a str,
+        module: &'a str,
+        deep: bool,
+        include_typechecking: bool,
+    ) -> ImportExtractor<'a> {
         ImportExtractor {
             source,
             module,
             deep,
+            include_typechecking,
             imports: Vec::new(),
         }
     }
@@ -91,7 +98,9 @@ impl<'b> SourceOrderVisitor<'b> for ImportExtractor<'_> {
                 //  - extract identifier from if condition and compare to imported symbol
                 let range = if_stmt.test.range();
                 let cond = &self.source[range.start().to_usize()..range.end().to_usize()];
-                if cond == "TYPE_CHECKING" || cond == "typing.TYPE_CHECKING" {
+                if (cond == "TYPE_CHECKING" || cond == "typing.TYPE_CHECKING")
+                    && !self.include_typechecking
+                {
                     // skip walking under
                     return;
                 }
@@ -125,9 +134,10 @@ pub fn raw_imports_from_module<'a>(
     source: &'a str,
     module: &'a str,
     deep: bool,
+    include_typechecking: bool,
 ) -> Result<Vec<String>, ParseError> {
     let m = parse_module(source)?;
-    let mut extractor = ImportExtractor::new(source, module, deep);
+    let mut extractor = ImportExtractor::new(source, module, deep, include_typechecking);
     extractor.visit_body(&m.syntax().body);
     Ok(extractor.imports)
 }
@@ -152,10 +162,12 @@ pub fn raw_get_all_imports(
     filepath: &str,
     module: &str,
     deep: bool,
+    include_typechecking: bool,
 ) -> Result<(bool, Vec<String>), Error> {
     let source = read_to_string(filepath).map_err(Error::IO)?;
     Ok((
         filepath.ends_with("__init__.py") && content_looks_like_pkgutil_ns_init(&source),
-        raw_imports_from_module(&source, module, deep).map_err(Error::Parse)?,
+        raw_imports_from_module(&source, module, deep, include_typechecking)
+            .map_err(Error::Parse)?,
     ))
 }

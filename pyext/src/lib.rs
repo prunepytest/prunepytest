@@ -43,6 +43,7 @@ impl ModuleGraph {
     #[pyo3(signature = (source_roots, global_prefixes, local_prefixes,
                         external_prefixes=HashSet::default(),
                         dynamic_deps=HashMap::default(),
+                        include_typechecking=false,
     ))]
     fn new(
         py: Python<'_>,
@@ -51,6 +52,7 @@ impl ModuleGraph {
         local_prefixes: HashSet<String>,
         external_prefixes: HashSet<String>,
         dynamic_deps: HashMap<String, HashSet<String>>,
+        include_typechecking: bool,
     ) -> PyResult<ModuleGraph> {
         let tc = py
             .allow_threads(|| {
@@ -60,7 +62,7 @@ impl ModuleGraph {
                     local_prefixes,
                     external_prefixes,
                 );
-                g.parse_parallel()?;
+                g.parse_parallel(include_typechecking)?;
                 if !dynamic_deps.is_empty() {
                     g.add_dynamic_dependencies(dynamic_deps);
                 }
