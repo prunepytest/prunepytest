@@ -53,6 +53,9 @@ class TrackerMixin:
     def record_dynamic(self) -> bool:
         return False
 
+    def implicit_anchor_aggregation(self) -> bool:
+        return False
+
     def dynamic_anchors(self) -> Optional[Mapping[str, AbstractSet[str]]]:
         return None
 

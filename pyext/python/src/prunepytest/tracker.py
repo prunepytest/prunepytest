@@ -141,6 +141,7 @@ class Tracker:
         "prefixes",
         "patches",
         "import_callback",
+        "implicit_anchor_aggregation",
     )
 
     def __init__(self) -> None:
@@ -174,6 +175,7 @@ class Tracker:
         prefixes: AbstractSet[str],
         patches: Optional[Mapping[str, Any]] = None,
         record_dynamic: bool = False,
+        implicit_anchor_aggregation: bool = True,
         dynamic_anchors: Optional[Mapping[str, AbstractSet[str]]] = None,
         dynamic_ignores: Optional[Mapping[str, AbstractSet[str]]] = None,
         log_file: Union[None, str, io.IOBase] = None,
@@ -203,6 +205,7 @@ class Tracker:
         self.patches = patches
         self.dynamic_anchors = dynamic_anchors or {}
         self.dynamic_ignores = dynamic_ignores or {}
+        self.implicit_anchor_aggregation = implicit_anchor_aggregation
 
         # resolve anchors to already-loaded modules
         # the rest will be resolved as needed when relevant modules are loaded
@@ -663,7 +666,7 @@ class Tracker:
 
         # if no explicit aggregation point is found, pick the topmost stack entry that
         # corresponds to a module being tracked
-        if not anchor:
+        if not anchor and self.implicit_anchor_aggregation:
             anchor = last_candidate
 
         if self.log_file:
