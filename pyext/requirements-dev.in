@@ -1,4 +1,5 @@
-pytest>=7
+pytest>=7.2
 pluggy>=1.2
+maturin>=1.7.8
 slipcover ; python_full_version > "3.7"
-mypy==1.13
+mypy==1.13 ; python_full_version > "3.7"
