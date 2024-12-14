@@ -52,22 +52,33 @@ else
   "${pip[@]}" install ${INSTALL_ARGS}
 fi
 
-if (( "$pyminor" > 7 )) ; then
+echo
+# slipcover does not support 3.7, but we still do
+if (( "$pyminor" > 7 )) && [[ "${PY_COVERAGE:-1}" == "1" ]]; then
   echo "--- pytest, with coverage"
   # TODO: enforce coverage thresholds
   libpath=".venv/lib/python$pyver"
   python -m slipcover --source $libpath/site-packages/prunepytest -m pytest --rootdir python
-
-  echo "--- mypy"
-  python -m mypy --strict --check-untyped-defs -p prunepytest
 else
   echo "--- pytest, without coverage (${pyver} not supported by slipcover)"
   python -m pytest --rootdir python
 fi
 
+# mypy has dropped support for 3.7 but we still support it...
+if (( "$pyminor" > 7 )) ; then
+  echo
+  echo "--- mypy"
+  python -m mypy --strict --check-untyped-defs -p prunepytest
+fi
+
 cd "${abs_dir}"
 
 if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
+  echo
+  echo "--- rust tests"
   cargo nextest run
+
+  echo
+  echo "--- rust coverage"
   cargo llvm-cov report --lcov --output-path lcov.info
 fi
