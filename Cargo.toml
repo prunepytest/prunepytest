@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.83"
 homepage = "https://github.com/taste-prune-pie/prune-py-test"
 documentation = "https://github.com/taste-prune-pie/prune-py-test"
 repository = "https://github.comtaste-prune-pie/prune-py-test"
