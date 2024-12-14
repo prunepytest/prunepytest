@@ -99,7 +99,6 @@ dependencies = [
  "fern",
  "ignore",
  "log",
- "pyo3",
  "speedy",
  "ustr",
 ]
@@ -112,7 +111,6 @@ dependencies = [
  "hi_sparse_bitset",
  "ignore",
  "log",
- "pyo3",
  "rayon",
  "regex",
  "ruff_python_ast",

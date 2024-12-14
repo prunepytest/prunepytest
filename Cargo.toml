@@ -15,7 +15,6 @@ common = { path = "common" }
 cmd = { path = "cmd" }
 pyext = { path = "pyext" }
 
-pyo3 = {  version = "0.23.3", features = ["abi3-py37"] }
 walkdir = "2.5"
 ignore = "0.4.23"
 log = "0.4.22"
