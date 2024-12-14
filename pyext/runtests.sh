@@ -26,10 +26,19 @@ else
   "${install_deps[@]}" requirements-3.7.txt
 fi
 
+maturin_mode=()
 if [[ -z "${INSTALL_ARGS}" ]] ; then
+  if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
+    cargo llvm-cov show-env --export-prefix > .cov.env
+    source .cov.env
+    cargo llvm-cov clean --workspace
+  else
+    maturin_mode=(--release)
+  fi
+
   # auto-build and install wheel
   "${pip[@]}" install \
-    "$("${maturin[@]}" build --release 2>&1 \
+    "$("${maturin[@]}" build ${maturin_mode+"${maturin_mode[@]}"} 2>&1 \
     | tee /dev/stderr \
     | grep -F 'Built wheel' \
     |  grep -Eo '[^ ]+.whl$' \
@@ -50,4 +59,8 @@ if (( "$pyminor" > 7 )) ; then
 else
   echo "--- pytest, without coverage (${pyver} not supported by slipcover)"
   python -m pytest --rootdir python
+fi
+
+if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
+  cargo llvm-cov report --lcov --manifest-path ../Cargo.toml --output-path lcov.info
 fi

@@ -58,6 +58,27 @@ jobs:
           export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
           ./runtests.sh
 
+  linux-rust-cover:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        python-version: ["3.7"]
+        platform:
+          - runner: ubuntu-latest
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: pytest
+        working-directory: pyext
+        run: |
+          RUST_COVER=1 ./runtests.sh
+      # TODO: run rust tests suite
+      # TODO upload rust coverage results
+
   linux-extra-test:
     runs-on: ${{ matrix.platform.runner }}
     needs: [linux]
