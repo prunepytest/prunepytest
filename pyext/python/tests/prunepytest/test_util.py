@@ -2,7 +2,7 @@
 
 import os.path
 
-from prunepytest.util import infer_ns_pkg, find_package_roots, hook_zeroconf
+from prunepytest.util import infer_ns_pkg, find_package_roots, hook_default
 
 from .conftest import TEST_DATA
 
@@ -68,9 +68,9 @@ def test_find_package_roots() -> None:
     )
 
 
-def test_hook_zeroconf() -> None:
+def test_hook_default() -> None:
     python_dir = TEST_DATA.parent
-    hook = hook_zeroconf(python_dir)
+    hook = hook_default(python_dir)
 
     assert hook.global_namespaces() == {"prunepytest"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}
@@ -87,7 +87,7 @@ def test_hook_zeroconf() -> None:
     assert hook.test_folders() == {"tests": "tests"}
 
     pyext_dir = python_dir.parent
-    hook = hook_zeroconf(pyext_dir)
+    hook = hook_default(pyext_dir)
 
     assert hook.global_namespaces() == {"prunepytest"} | expected_test_data_pkg
     assert hook.local_namespaces() == {"tests"}

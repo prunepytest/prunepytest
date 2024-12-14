@@ -11,7 +11,7 @@ from prunepytest.validator import validate
 from .conftest import TEST_DATA
 
 
-def test_validator_zeroconf_from_pyext_python() -> None:
+def test_validator_default_from_pyext_python() -> None:
     python_dir = TEST_DATA.parent
 
     with chdir(python_dir):
@@ -21,7 +21,7 @@ def test_validator_zeroconf_from_pyext_python() -> None:
         assert n_missing == 0
 
 
-def test_validator_zeroconf_from_pyext() -> None:
+def test_validator_default_from_pyext() -> None:
     pyext_dir = TEST_DATA.parent.parent
 
     with chdir(pyext_dir):
@@ -31,7 +31,7 @@ def test_validator_zeroconf_from_pyext() -> None:
         assert n_missing == 0
 
 
-def test_validator_zeroconf_from_repo_root() -> None:
+def test_validator_default_from_repo_root() -> None:
     root_dir = TEST_DATA.parent.parent.parent
 
     with chdir(root_dir):
@@ -41,7 +41,7 @@ def test_validator_zeroconf_from_repo_root() -> None:
         assert n_missing == 0
 
 
-def test_validator_zeroconf_with_graph() -> None:
+def test_validator_default_with_graph() -> None:
     python_dir = TEST_DATA.parent
 
     with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
@@ -57,8 +57,8 @@ def test_validator_zeroconf_with_graph() -> None:
         assert n_missing == 0
 
 
-ZEROCONF_HOOK_PY = """
-from prunepytest.api import ZeroConfHook
+DEFAULT_HOOK_PY = """
+from prunepytest.api import DefaultHook
 
 def foo():
     pass
@@ -66,18 +66,18 @@ def foo():
 class NotAHook:
     pass
 
-class TestHook(ZeroConfHook):
+class TestHook(DefaultHook):
     pass
 """
 
 
-def test_validator_with_custom_zeroconf_hook() -> None:
+def test_validator_with_custom_default_hook() -> None:
     python_dir = TEST_DATA.parent
 
     with chdir(python_dir), tempfile.TemporaryDirectory() as tmpdir:
         hook_path = os.path.join(tmpdir, "hook.py")
         with open(hook_path, "w") as f:
-            f.write(ZEROCONF_HOOK_PY)
+            f.write(DEFAULT_HOOK_PY)
 
         n_err, n_missing = validate(hook_path)
         assert n_err == 0

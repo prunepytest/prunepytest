@@ -56,7 +56,7 @@ from .util import (
     print_with_timestamp,
     load_import_graph,
     load_hook,
-    hook_zeroconf,
+    hook_default,
 )
 
 
@@ -219,7 +219,7 @@ def validate(
     hook = (
         load_hook(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
         if hook_path
-        else hook_zeroconf(pathlib.Path.cwd())
+        else hook_default(pathlib.Path.cwd())
     )
 
     t = Tracker()

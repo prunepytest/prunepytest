@@ -127,7 +127,7 @@ class ValidatorHook(PluginHook, ValidatorMixin, metaclass=ABCMeta):
     pass
 
 
-class ZeroConfHook(ValidatorHook):
+class DefaultHook(ValidatorHook):
     __slots__ = ("global_ns", "local_ns", "src_roots", "tst_dirs", "tst_file_pattern")
 
     def __init__(

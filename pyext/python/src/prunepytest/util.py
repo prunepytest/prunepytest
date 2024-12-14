@@ -12,11 +12,11 @@ from typing import cast, Any, Dict, Generator, Optional, Set, Tuple, Type, TypeV
 
 
 from . import ModuleGraph
-from .api import ZeroConfHook, BaseHook
+from .api import DefaultHook, BaseHook
 
 
 Hook_T = TypeVar("Hook_T", bound=BaseHook)
-ZeroConfHook_T = TypeVar("ZeroConfHook_T", bound=ZeroConfHook)
+DefaultHook_T = TypeVar("DefaultHook_T", bound=DefaultHook)
 
 
 mono_ref = time.monotonic_ns()
@@ -165,10 +165,10 @@ def filter_packages(
     return filtered
 
 
-def hook_zeroconf(
+def hook_default(
     root: pathlib.PurePath,
-    cls: Type[ZeroConfHook_T] = ZeroConfHook,  # type: ignore[assignment]
-) -> ZeroConfHook_T:
+    cls: Type[DefaultHook_T] = DefaultHook,  # type: ignore[assignment]
+) -> DefaultHook_T:
     """
     Try to infer global and local namespaces, for sane zero-conf behavior
     """
@@ -211,7 +211,7 @@ def hook_zeroconf(
     tst_file_pattern = toml_xtract(pyproj, "tool.pytest.ini_options.python_files")
 
     print(
-        f"zeroconf: {global_ns}, {local_ns}, {source_roots}, {test_folders}, {tst_file_pattern}"
+        f"default hook: {global_ns}, {local_ns}, {source_roots}, {test_folders}, {tst_file_pattern}"
     )
     return cls(global_ns, local_ns, source_roots, test_folders, tst_file_pattern)
 
@@ -232,8 +232,8 @@ def load_hook(root: pathlib.Path, hook: str, base_cls: Type[Hook_T]) -> Hook_T:
         if not issubclass(val, base_cls):
             continue
         print(name, val)
-        if issubclass(val, ZeroConfHook):
-            return cast(Hook_T, hook_zeroconf(root, val))
+        if issubclass(val, DefaultHook):
+            return cast(Hook_T, hook_default(root, val))
         return val()
 
     raise ValueError(f"no implementation of {base_cls} found in {str(root / hook)}")

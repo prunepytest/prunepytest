@@ -3,7 +3,7 @@
 import pathlib
 
 from _pytest._code import Source
-from prunepytest.util import load_import_graph, hook_zeroconf
+from prunepytest.util import load_import_graph, hook_default
 
 
 def write_text(path, content):
@@ -134,7 +134,7 @@ def test_load_existing_graph(pytester):
         """,
     )
 
-    hook = hook_zeroconf(pytester.path)
+    hook = hook_default(pytester.path)
     load_import_graph(hook).to_file("graph.bin")
 
     pytester.plugins = ["prunepytest"]
