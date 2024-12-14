@@ -1,5 +1,9 @@
 #! /bin/bash
-set -e -o pipefail
+set -eu -o pipefail
+
+readonly abs_dir=$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
+
+cd "${abs_dir}/pyext"
 
 if command -v uv ; then
   mk_venv=(uv venv)
@@ -27,7 +31,7 @@ else
 fi
 
 maturin_mode=()
-if [[ -z "${INSTALL_ARGS}" ]] ; then
+if [[ -z "${INSTALL_ARGS:-}" ]] ; then
   if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
     cargo llvm-cov show-env --export-prefix > .cov.env
     source .cov.env
@@ -61,6 +65,9 @@ else
   python -m pytest --rootdir python
 fi
 
+cd "${abs_dir}"
+
 if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
-  cargo llvm-cov report --lcov --manifest-path ../Cargo.toml --output-path lcov.info
+  cargo nextest run
+  cargo llvm-cov report --lcov --output-path lcov.info
 fi
