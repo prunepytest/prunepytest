@@ -24,8 +24,12 @@ source .venv/bin/activate
 
 pyver=$(python -c 'import sys ; print(".".join(str(v) for v in sys.version_info[0:2]))')
 pyminor=$(echo "$pyver" | cut -d. -f 2)
-if (( "$pyminor" > 7 )) ; then
-  "${install_deps[@]}" requirements-dev.txt
+if (( "$pyminor" > 7 )); then
+  if [[ "${PY_COVERAGE:-1}" == "1" ]] ; then
+    "${install_deps[@]}" requirements-dev.txt
+  else
+    "${install_deps[@]}" <(grep -Fv slipcover requirements-dev.txt)
+  fi
 else
   "${install_deps[@]}" requirements-3.7.txt
 fi
@@ -36,6 +40,10 @@ if [[ -z "${INSTALL_ARGS:-}" ]] ; then
     cargo llvm-cov show-env --export-prefix > .cov.env
     source .cov.env
     cargo llvm-cov clean --workspace
+    # manylinux compat without going into  container
+    # TODO: restrict to linux
+    pip install maturin[zig]
+    maturin_mode=(--zig)
   else
     maturin_mode=(--release)
   fi
@@ -80,5 +88,5 @@ if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
 
   echo
   echo "--- rust coverage"
-  cargo llvm-cov report --lcov --output-path lcov.info
+  cargo llvm-cov report --html
 fi

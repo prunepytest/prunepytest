@@ -68,10 +68,9 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
-        python-version: ["3.7"]
+        python-version: ["3.9"]
         platform:
           - runner: ubuntu-latest
-            target: x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -81,17 +80,9 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov, cargo-nextest
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --out dist
-          working-directory: pyext
-          sccache: 'true'
-          manylinux: auto
       - name: pytest
         run: |
-          RUST_COVER=1 ./runtests.sh
+          RUST_COVERAGE=1 ./runtests.sh
       # TODO upload rust coverage results
 
   linux-native:
