@@ -9,7 +9,6 @@ includes two parts:
 """
 
 import os
-import sys
 import warnings
 
 import pathlib
@@ -208,7 +207,7 @@ def pytest_configure(config: pytest.Config) -> None:
         print(f"modified: {modified}")
 
         config.pluginmanager.register(
-            PruneSelector(graph, set(modified)),
+            PruneSelector(hook, graph, set(modified)),
             "PruneSelector",
         )
 
@@ -326,6 +325,8 @@ class PruneValidator:
         self.current_file: Optional[str] = None
         self.expected_imports: Optional[AbstractSet[str]] = None
 
+        self.always_run = hook.always_run()
+
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
     def pytest_sessionstart(
         self, session: pytest.Session
@@ -386,12 +387,20 @@ class PruneValidator:
                 graph_path
             )
 
-        if not f.endswith(".py") or self.expected_imports is None:
+        if (
             # unhandled data-driven test case
             #  - will never be deselected
             #  - validation errors would be spurious as we have no graph coverage...
+            not f.endswith(".py")
+            or self.expected_imports is None
+            # explicitly requested to always run, presumably because of complex dynamic
+            # imports that are not worth encoding into the import graph
+            or f in self.always_run
+            or (f + ":" + item.name.partition("[")[0]) in self.always_run
+        ):
             # => skip validation altogether
-            print(f"unhandled test case: {f} [ {item} ]", file=sys.stderr)
+            if item.session.config.option.verbose > 1:
+                print(f"unhandled test case: {f} [ {item} ]")
             return (yield)
 
         import_path = f[:-3].replace("/", ".")
@@ -443,6 +452,9 @@ class PruneValidator:
         # NB: for warning-only mode, make sure we avoid double reporting
         unexpected = caused_by_test - expected - warnings_emitted
         if unexpected:
+            # TODO: detail where the dynamic imports are coming from
+            print(self.tracker.dynamic_users.get(import_path))
+            print(self.tracker.dynamic_imports)
             _report_unexpected(item, unexpected)
 
         return outcome
@@ -482,7 +494,10 @@ class PruneSelector:
     pytest hooks to deselect test cases based on import graph and modified files
     """
 
-    def __init__(self, graph: GraphLoader, modified: AbstractSet[str]) -> None:
+    def __init__(
+        self, hook: PluginHook, graph: GraphLoader, modified: AbstractSet[str]
+    ) -> None:
+        self.hook = hook
         self.graph = graph
         self.modified = modified
 
@@ -498,6 +513,7 @@ class PruneSelector:
         # print(f"affected: {affected}", file=sys.stderr)
 
         covered_files = {}
+        always_run = self.hook.always_run()
 
         # loop from the end to easily remove items as we go
         i = len(items) - 1
@@ -512,6 +528,7 @@ class PruneSelector:
             # 1. python test file is not covered by the import graph
             # 2. python test file is affected by some modified file(s) according to the import graph
             # 3. data-driven test, and data file was modified
+            # 4. file / test case marked as "always_run" by hook
             #
             # NB: at a later point, 3. could be extended by allowing explicit tagging of non-code
             # dependencies with some custom annotation (via comments collected by ModuleGraph, or
@@ -520,6 +537,8 @@ class PruneSelector:
                 not covered_files[file]
                 or (file in affected)
                 or (data and data in self.modified)
+                or (file in always_run)
+                or (item.name in always_run)
             )
             if not keep:
                 skipped.append(item)
@@ -528,7 +547,8 @@ class PruneSelector:
 
         session.ihook.pytest_deselected(items=skipped)
 
-        print(f"skipped: {len(skipped)}/{n}")
+        if config.option.verbose > 1:
+            print(f"skipped: {len(skipped)}/{n}")
 
     @pytest.hookimpl(trylast=True)  # type: ignore
     def pytest_sessionfinish(

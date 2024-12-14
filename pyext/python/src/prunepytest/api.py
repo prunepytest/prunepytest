@@ -112,7 +112,8 @@ class PluginHook(BaseHook, TrackerMixin, metaclass=ABCMeta):
     Full API used by pytest plugin
     """
 
-    pass
+    def always_run(self) -> AbstractSet[str]:
+        return frozenset()
 
 
 class ValidatorHook(PluginHook, ValidatorMixin, metaclass=ABCMeta):
