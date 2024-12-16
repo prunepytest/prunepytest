@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "dashmap",
  "hi_sparse_bitset",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "pyext"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "common",
  "fern",
