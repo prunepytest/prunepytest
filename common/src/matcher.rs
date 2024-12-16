@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn add() {
-        let mut m = MatcherNode::new();
+        let mut m = MatcherNode::default();
         m.add("foo.bar.baz", '.');
         m.add("foo/baz/bar", '/');
         m.add("foo", '/');
