@@ -368,3 +368,163 @@ def test_local_affected_by_modules(g):
             "tests.prunepytest.test_plugin_validate",
         }
     }
+
+
+def test_dynamic_dependencies_at_leaves_unified_global(g):
+    # clone before modification to avoid interfering with other tests
+    g = g.clone()
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.tracker",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+
+    assert "tests.prunepytest.test_tracker" not in g.affected_by_modules(
+        ["prunepytest.api"]
+    )
+
+    g.add_dynamic_dependencies_at_leaves(
+        [
+            ("prunepytest.tracker", {"prunepytest.api"}),
+        ],
+        [],
+    )
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.api",
+        "prunepytest.tracker",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+
+    assert p("tests/prunepytest/test_tracker.py") in g.affected_by_files(
+        [p("src/prunepytest/api.py")]
+    )
+    assert "tests.prunepytest.test_tracker" in g.affected_by_modules(
+        ["prunepytest.api"]
+    )
+
+
+def test_dynamic_dependencies_at_leaves_unified_local(g):
+    # clone before modification to avoid interfering with other tests
+    g = g.clone()
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.tracker",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+    assert "tests.prunepytest.test_tracker" not in g.affected_by_modules(
+        ["tests.prunepytest.tracker_helper"]
+    )
+
+    g.add_dynamic_dependencies_at_leaves(
+        [
+            ("tests.prunepytest.tracker_helper", {"prunepytest.vcs.git"}),
+        ],
+        [],
+    )
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.tracker",
+        "prunepytest.vcs",
+        "prunepytest.vcs.git",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+
+    assert p("tests/prunepytest/test_tracker.py") in g.affected_by_files(
+        [p("src/prunepytest/vcs/git.py")]
+    )
+    assert "tests.prunepytest.test_tracker" in g.affected_by_modules(
+        ["prunepytest.vcs.git"]
+    )
+
+
+def test_dynamic_dependencies_at_leaves_varying_global(g):
+    # clone before modification to avoid interfering with other tests
+    g = g.clone()
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.tracker",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+
+    assert "tests.prunepytest.test_tracker" not in g.affected_by_modules(
+        ["prunepytest.api"]
+    )
+
+    g.add_dynamic_dependencies_at_leaves(
+        [],
+        [
+            ("prunepytest.tracker", {"tests": {"prunepytest.api"}}),
+        ],
+    )
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.api",
+        "prunepytest.tracker",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+
+    assert p("tests/prunepytest/test_tracker.py") in g.affected_by_files(
+        [p("src/prunepytest/api.py")]
+    )
+    assert "tests.prunepytest.test_tracker" in g.affected_by_modules(
+        ["prunepytest.api"]
+    )
+
+
+def test_dynamic_dependencies_at_leaves_varying_local(g):
+    # clone before modification to avoid interfering with other tests
+    g = g.clone()
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.tracker",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+    assert "tests.prunepytest.test_tracker" not in g.affected_by_modules(
+        ["tests.prunepytest.tracker_helper"]
+    )
+
+    g.add_dynamic_dependencies_at_leaves(
+        [],
+        [
+            ("tests/prunepytest/tracker_helper.py", {"tests": {"prunepytest.vcs.git"}}),
+        ],
+    )
+
+    assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {
+        "prunepytest",
+        "prunepytest.tracker",
+        "prunepytest.vcs",
+        "prunepytest.vcs.git",
+        "tests",
+        "tests.prunepytest",
+        "tests.prunepytest.tracker_helper",
+    }
+
+    assert p("tests/prunepytest/test_tracker.py") in g.affected_by_files(
+        [p("src/prunepytest/vcs/git.py")]
+    )
+    assert "tests.prunepytest.test_tracker" in g.affected_by_modules(
+        ["prunepytest.vcs.git"]
+    )

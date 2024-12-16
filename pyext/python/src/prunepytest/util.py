@@ -72,10 +72,10 @@ def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph
             print(f"unresolved: {unresolved}")
 
         print_with_timestamp("--- computing dynamic dependencies")
-        unified, per_pkg = hook.dynamic_dependencies_at_edges()
+        unified, per_pkg = hook.dynamic_dependencies_at_leaves()
         if unified or per_pkg:
             print_with_timestamp("--- incorporating dynamic dependencies")
-            g.add_dynamic_dependencies_at_edges(unified, per_pkg)
+            g.add_dynamic_dependencies_at_leaves(unified, per_pkg)
 
     return g
 

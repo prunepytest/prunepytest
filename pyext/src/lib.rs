@@ -101,7 +101,7 @@ impl ModuleGraph {
     }
 
     #[pyo3(signature = (simple_unified, simple_per_package))]
-    fn add_dynamic_dependencies_at_edges(
+    fn add_dynamic_dependencies_at_leaves(
         &mut self,
         py: Python<'_>,
         simple_unified: Vec<(String, HashSet<String>)>,

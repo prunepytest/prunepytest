@@ -33,7 +33,7 @@ class BaseHook(ABC):
     def dynamic_dependencies(self) -> Mapping[str, AbstractSet[str]]:
         return {}
 
-    def dynamic_dependencies_at_edges(
+    def dynamic_dependencies_at_leaves(
         self,
     ) -> Tuple[
         Sequence[Tuple[str, AbstractSet[str]]],
