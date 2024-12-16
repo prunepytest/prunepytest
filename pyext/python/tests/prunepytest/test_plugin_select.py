@@ -6,6 +6,11 @@ import pathlib
 from _pytest._code import Source
 
 
+# for the import parser
+if False:
+    from prunepytest import plugin  # noqa
+
+
 def write_text(path, content):
     path.write_text(str(Source(content)))
 

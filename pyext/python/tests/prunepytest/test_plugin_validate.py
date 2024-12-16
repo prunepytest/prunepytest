@@ -6,6 +6,11 @@ from _pytest._code import Source
 from prunepytest.util import load_import_graph, hook_default
 
 
+# for the import parser
+if False:
+    from prunepytest import plugin  # noqa
+
+
 def write_text(path, content):
     path.write_text(str(Source(content)))
 
