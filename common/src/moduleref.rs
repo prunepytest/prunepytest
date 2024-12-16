@@ -145,16 +145,16 @@ impl ModuleRefCache {
         if fs.is_empty() {
             // namespace package, either implicit or explicit
             // since there can be multiple __init__.py, we don't record any
-            if let Some(r) = match pkg {
+            if let Some(&r) = match pkg {
                 None => self.py_to_ref_global.get(&py),
                 Some(p) => self.py_to_ref_local.get(&p).and_then(|m| m.get(&py)),
             } {
-                return *r;
+                return r;
             }
-        } else if let Some(r) = self.fs_to_ref.get(&fs) {
-            let mr = *r;
-            assert_eq!(self.values[mr as usize].pkg, pkg);
-            return mr;
+        } else if let Some(&r) = self.fs_to_ref.get(&fs) {
+            assert_eq!(self.values[r as usize].pkg, pkg);
+            assert_eq!(self.values[r as usize].py, py);
+            return r;
         } else if let Some(r) = self.ref_for_py(py, pkg) {
             let rfs = self.values[r as usize].fs;
             // we don't want hard mismatch here, but we allow soft mismatch for
@@ -288,5 +288,233 @@ where
             values.push(reader.read_value::<ModuleRefVal>()?);
         }
         Ok(ModuleRefCache::from_values(values))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::MAIN_SEPARATOR_STR;
+
+    #[test]
+    fn get_or_create_global() {
+        let mrc = LockedModuleRefCache::default();
+        let r0 = mrc.get_or_create(ustr("foo/bar.py"), ustr("foo.bar"), None);
+        let r1 = mrc.get_or_create(ustr("foo/baz.py"), ustr("foo.baz"), None);
+        let r2 = mrc.get_or_create(ustr("qux.py"), ustr("qux"), None);
+
+        assert!(r0 < mrc.max_value());
+        assert!(r1 < mrc.max_value());
+        assert!(r2 < mrc.max_value());
+        assert_ne!(r0, r1);
+        assert_ne!(r0, r2);
+        assert_ne!(r1, r2);
+
+        let max = mrc.max_value();
+
+        assert_eq!(
+            r0,
+            mrc.get_or_create(ustr("foo/bar.py"), ustr("foo.bar"), None)
+        );
+        assert_eq!(
+            r1,
+            mrc.get_or_create(ustr("foo/baz.py"), ustr("foo.baz"), None)
+        );
+        assert_eq!(r2, mrc.get_or_create(ustr("qux.py"), ustr("qux"), None));
+
+        assert_eq!(max, mrc.max_value());
+
+        assert_eq!("foo/bar.py", mrc.fs_for_ref(r0));
+        assert_eq!("foo/baz.py", mrc.fs_for_ref(r1));
+        assert_eq!("qux.py", mrc.fs_for_ref(r2));
+
+        assert_eq!("foo.bar", mrc.py_for_ref(r0));
+        assert_eq!("foo.baz", mrc.py_for_ref(r1));
+        assert_eq!("qux", mrc.py_for_ref(r2));
+
+        assert_eq!(None, mrc.pkg_for_ref(r0));
+        assert_eq!(None, mrc.pkg_for_ref(r1));
+        assert_eq!(None, mrc.pkg_for_ref(r2));
+
+        assert_eq!(Some(r0), mrc.ref_for_fs(ustr("foo/bar.py")));
+        assert_eq!(Some(r1), mrc.ref_for_fs(ustr("foo/baz.py")));
+        assert_eq!(Some(r2), mrc.ref_for_fs(ustr("qux.py")));
+        assert_eq!(None, mrc.ref_for_fs(ustr("foo.bar")));
+        assert_eq!(None, mrc.ref_for_fs(ustr("foo.baz")));
+        assert_eq!(None, mrc.ref_for_fs(ustr("qux")));
+
+        assert_eq!(None, mrc.ref_for_py(ustr("foo/bar.py"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("foo/baz.py"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("qux.py"), None));
+        assert_eq!(Some(r0), mrc.ref_for_py(ustr("foo.bar"), None));
+        assert_eq!(Some(r1), mrc.ref_for_py(ustr("foo.baz"), None));
+        assert_eq!(Some(r2), mrc.ref_for_py(ustr("qux"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("foo.bar"), Some(ustr("foo"))));
+        assert_eq!(None, mrc.ref_for_py(ustr("foo.baz"), Some(ustr("foo"))));
+        assert_eq!(None, mrc.ref_for_py(ustr("qux"), Some(ustr("foo"))));
+    }
+
+    #[test]
+    fn get_or_create_local() {
+        let mrc = LockedModuleRefCache::default();
+        let r0 = mrc.get_or_create(ustr("a/foo.py"), ustr("foo"), Some(ustr("a")));
+        let r1 = mrc.get_or_create(ustr("b/foo.py"), ustr("foo"), Some(ustr("b")));
+        let r2 = mrc.get_or_create(ustr("c/foo.py"), ustr("foo"), None);
+
+        assert!(r0 < mrc.max_value());
+        assert!(r1 < mrc.max_value());
+        assert!(r2 < mrc.max_value());
+        assert_ne!(r0, r1);
+        assert_ne!(r0, r2);
+        assert_ne!(r1, r2);
+
+        let max = mrc.max_value();
+
+        assert_eq!(
+            r0,
+            mrc.get_or_create(ustr("a/foo.py"), ustr("foo"), Some(ustr("a")))
+        );
+        assert_eq!(
+            r1,
+            mrc.get_or_create(ustr("b/foo.py"), ustr("foo"), Some(ustr("b")))
+        );
+        assert_eq!(r2, mrc.get_or_create(ustr("c/foo.py"), ustr("foo"), None));
+
+        assert_eq!(max, mrc.max_value());
+
+        assert_eq!("a/foo.py", mrc.fs_for_ref(r0));
+        assert_eq!("b/foo.py", mrc.fs_for_ref(r1));
+        assert_eq!("c/foo.py", mrc.fs_for_ref(r2));
+
+        assert_eq!("foo", mrc.py_for_ref(r0));
+        assert_eq!("foo", mrc.py_for_ref(r1));
+        assert_eq!("foo", mrc.py_for_ref(r2));
+
+        assert_eq!(Some(ustr("a")), mrc.pkg_for_ref(r0));
+        assert_eq!(Some(ustr("b")), mrc.pkg_for_ref(r1));
+        assert_eq!(None, mrc.pkg_for_ref(r2));
+
+        assert_eq!(Some(r0), mrc.ref_for_fs(ustr("a/foo.py")));
+        assert_eq!(Some(r1), mrc.ref_for_fs(ustr("b/foo.py")));
+        assert_eq!(Some(r2), mrc.ref_for_fs(ustr("c/foo.py")));
+        assert_eq!(None, mrc.ref_for_fs(ustr("foo")));
+
+        assert_eq!(None, mrc.ref_for_py(ustr("a/foo.py"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("b/foo.py"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("c/foo.py"), None));
+        assert_eq!(Some(r0), mrc.ref_for_py(ustr("foo"), Some(ustr("a"))));
+        assert_eq!(Some(r1), mrc.ref_for_py(ustr("foo"), Some(ustr("b"))));
+        assert_eq!(Some(r2), mrc.ref_for_py(ustr("foo"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("foo"), Some(ustr("c"))));
+    }
+
+    #[test]
+    fn get_or_create_no_fs() {
+        let mrc = LockedModuleRefCache::default();
+
+        // namespace pkg may have the same py mapping to multiple fs value
+        // to support that, we allow the fs value to be omitted
+        let r0 = mrc.get_or_create(ustr(""), ustr("foo"), Some(ustr("a")));
+        let r1 = mrc.get_or_create(ustr(""), ustr("foo"), Some(ustr("b")));
+        let r2 = mrc.get_or_create(ustr(""), ustr("foo"), None);
+
+        assert!(r0 < mrc.max_value());
+        assert!(r1 < mrc.max_value());
+        assert!(r2 < mrc.max_value());
+        assert_ne!(r0, r1);
+        assert_ne!(r0, r2);
+        assert_ne!(r1, r2);
+
+        let max = mrc.max_value();
+
+        assert_eq!(
+            r0,
+            mrc.get_or_create(ustr(""), ustr("foo"), Some(ustr("a")))
+        );
+        assert_eq!(
+            r1,
+            mrc.get_or_create(ustr(""), ustr("foo"), Some(ustr("b")))
+        );
+        assert_eq!(r2, mrc.get_or_create(ustr(""), ustr("foo"), None));
+
+        assert_eq!(max, mrc.max_value());
+
+        assert_eq!("", mrc.fs_for_ref(r0));
+        assert_eq!("", mrc.fs_for_ref(r1));
+        assert_eq!("", mrc.fs_for_ref(r2));
+
+        assert_eq!("foo", mrc.py_for_ref(r0));
+        assert_eq!("foo", mrc.py_for_ref(r1));
+        assert_eq!("foo", mrc.py_for_ref(r2));
+
+        assert_eq!(Some(ustr("a")), mrc.pkg_for_ref(r0));
+        assert_eq!(Some(ustr("b")), mrc.pkg_for_ref(r1));
+        assert_eq!(None, mrc.pkg_for_ref(r2));
+
+        assert_eq!(None, mrc.ref_for_fs(ustr("")));
+
+        assert_eq!(None, mrc.ref_for_py(ustr(""), None));
+        assert_eq!(Some(r0), mrc.ref_for_py(ustr("foo"), Some(ustr("a"))));
+        assert_eq!(Some(r1), mrc.ref_for_py(ustr("foo"), Some(ustr("b"))));
+        assert_eq!(Some(r2), mrc.ref_for_py(ustr("foo"), None));
+        assert_eq!(None, mrc.ref_for_py(ustr("foo"), Some(ustr("c"))));
+    }
+
+    #[test]
+    fn allow_mixed_fs() {
+        let mrc = LockedModuleRefCache::default();
+        let r0 = mrc.get_or_create(ustr(""), ustr("foo"), None);
+        let r1 = mrc.get_or_create(ustr("foo.py"), ustr("foo"), None);
+
+        assert_eq!(r0, r1);
+
+        let r2 = mrc.get_or_create(ustr("bar.py"), ustr("bar"), None);
+        let r3 = mrc.get_or_create(ustr(""), ustr("bar"), None);
+
+        assert_eq!(r2, r3);
+        assert_ne!(r0, r2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn disallow_path_sep_in_py() {
+        let mrc = LockedModuleRefCache::default();
+        mrc.get_or_create(
+            ustr(""),
+            ustr(&("foo".to_string() + MAIN_SEPARATOR_STR + "bar")),
+            None,
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn disallow_mismatch_pkg() {
+        let mrc = LockedModuleRefCache::default();
+        mrc.get_or_create(ustr("foo.py"), ustr("foo"), None);
+        mrc.get_or_create(ustr("foo.py"), ustr("foo"), Some(ustr("foo")));
+    }
+
+    #[test]
+    #[should_panic]
+    fn disallow_mismatch_pkg_2() {
+        let mrc = LockedModuleRefCache::default();
+        mrc.get_or_create(ustr("foo.py"), ustr("foo"), Some(ustr("foo")));
+        mrc.get_or_create(ustr("foo.py"), ustr("foo"), Some(ustr("bar")));
+    }
+
+    #[test]
+    #[should_panic]
+    fn disallow_mismatch_py_global() {
+        let mrc = LockedModuleRefCache::default();
+        mrc.get_or_create(ustr("foo.py"), ustr("foo"), None);
+        mrc.get_or_create(ustr("foo.py"), ustr("bar"), None);
+    }
+
+    #[test]
+    #[should_panic]
+    fn disallow_mismatch_py_local() {
+        let mrc = LockedModuleRefCache::default();
+        mrc.get_or_create(ustr("foo.py"), ustr("foo"), Some(ustr("foo")));
+        mrc.get_or_create(ustr("foo.py"), ustr("bar"), Some(ustr("foo")));
     }
 }
