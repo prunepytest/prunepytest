@@ -72,6 +72,13 @@ impl ModuleGraph {
         Ok(ModuleGraph { tc })
     }
 
+    #[pyo3(signature = ())]
+    fn clone(&self) -> PyResult<ModuleGraph> {
+        Ok(ModuleGraph {
+            tc: self.tc.clone(),
+        })
+    }
+
     #[staticmethod]
     #[pyo3(signature = (filepath))]
     fn from_file(py: Python<'_>, filepath: &str) -> PyResult<ModuleGraph> {
