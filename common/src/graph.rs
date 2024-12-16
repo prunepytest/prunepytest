@@ -544,27 +544,9 @@ impl ModuleGraph {
         }
     }
 
-    fn first_matching_ref(&self, m: &str) -> Option<ModuleRef> {
-        self.modules_refs
-            .ref_for_fs(ustr(m))
-            .or_else(|| self.modules_refs.ref_for_py(ustr(m), None))
-            .or_else(|| {
-                for (fs, py) in &self.source_roots {
-                    if !m.starts_with(py) {
-                        continue;
-                    }
-                    let x = self.modules_refs.ref_for_py(ustr(m), Some(ustr(fs)));
-                    if x.is_some() {
-                        return x;
-                    }
-                }
-                None
-            })
-    }
-
     pub fn add_dynamic_dependencies(&self, dynamic_edges: HashMap<String, HashSet<String>>) {
         for (m, deps) in dynamic_edges {
-            if let Some(r) = self.first_matching_ref(&m) {
+            if let Some(r) = self.modules_refs.first_matching_ref(ustr(&m)) {
                 debug!("dynamic dep: {} -> {} +{:?}", m, r, deps);
                 self.add_dynamic_dep(r, deps);
             } else {

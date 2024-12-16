@@ -22,6 +22,7 @@ impl ModuleRefVal {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ModuleRefCache {
     values: Vec<ModuleRefVal>,
     fs_to_ref: HashMap<Ustr, ModuleRef>,
@@ -71,6 +72,10 @@ impl LockedModuleRefCache {
     }
     pub fn pkg_for_ref(&self, r: ModuleRef) -> Option<Ustr> {
         self.inner.read().unwrap().pkg_for_ref(r)
+    }
+
+    pub fn first_matching_ref(&self, m: Ustr) -> Option<ModuleRef> {
+        self.inner.read().unwrap().first_matching_ref(m)
     }
 
     pub fn ref_for_py(&self, py: Ustr, pkg: Option<Ustr>) -> Option<ModuleRef> {
@@ -127,6 +132,19 @@ impl ModuleRefCache {
     }
     pub fn pkg_for_ref(&self, r: ModuleRef) -> Option<Ustr> {
         self.values[r as usize].pkg
+    }
+
+    pub fn first_matching_ref(&self, m: Ustr) -> Option<ModuleRef> {
+        self.ref_for_fs(m)
+            .or_else(|| self.ref_for_py(m, None))
+            .or_else(|| {
+                for refs in self.py_to_ref_local.values() {
+                    if let Some(&x) = refs.get(&m) {
+                        return Some(x);
+                    }
+                }
+                None
+            })
     }
 
     pub fn ref_for_py(&self, py: Ustr, pkg: Option<Ustr>) -> Option<ModuleRef> {

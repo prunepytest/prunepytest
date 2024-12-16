@@ -20,6 +20,7 @@ type CondensedRef = usize;
 type CondensedNode = HashSet<ModuleRef>;
 type CondensedEdges = BitSet<_128bit>;
 
+#[derive(Debug, Clone)]
 pub struct TransitiveClosure {
     // map filesystem / python paths <-> ModuleRef
     module_refs: ModuleRefCache,
@@ -467,14 +468,14 @@ pub fn apply_dynamic_edges_at_leaves(
     per_package: &Vec<(String, HashMap<String, HashSet<String>>)>,
 ) {
     for (trigger, extra_deps) in unified {
-        if let Some(mod_ref) = tc.module_refs.ref_for_py(ustr(trigger), None) {
+        if let Some(mod_ref) = tc.module_refs.first_matching_ref(ustr(trigger)) {
             let c = tc.mod_to_condensed[mod_ref as usize];
             let cd = convert_deps(tc, c, extra_deps);
             apply_unified_trigger(tc, c, &cd);
         }
     }
     for (trigger, per_pkg_deps) in per_package {
-        if let Some(mod_ref) = tc.module_refs.ref_for_py(ustr(trigger), None) {
+        if let Some(mod_ref) = tc.module_refs.first_matching_ref(ustr(trigger)) {
             let c = tc.mod_to_condensed[mod_ref as usize];
             let mut d = HashMap::with_capacity(per_package.len());
             for (pkg, extra_deps) in per_pkg_deps {
