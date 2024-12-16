@@ -24,7 +24,7 @@ pub struct ModuleGraph {
 
     // import to track even without matching code
     // most useful to track importlib and __import___
-    external_prefixes: HashSet<String>,
+    external_prefixes: MatcherNode,
 
     // prefix matching for package import/package paths
     import_matcher: MatcherNode,
@@ -72,7 +72,7 @@ impl ModuleGraph {
             source_roots,
             global_prefixes,
             local_prefixes,
-            external_prefixes,
+            external_prefixes: MatcherNode::from(external_prefixes, '.'),
             modules_refs: LockedModuleRefCache::new(),
             dir_cache: DashMap::new(),
             global_ns: DashMap::new(),
@@ -120,8 +120,9 @@ impl ModuleGraph {
         let mut imports = HashSet::new();
 
         for dep in deps {
-            if self.external_prefixes.contains(&dep) {
-                imports.insert(self.modules_refs.get_or_create(ustr(""), ustr(&dep), None));
+            let pref = self.external_prefixes.longest_prefix(&dep, '.');
+            if !pref.is_empty() {
+                imports.insert(self.modules_refs.get_or_create(ustr(""), ustr(pref), None));
                 continue;
             } else if dep.ends_with(".*") {
                 // NB: per python spec, star import only import submodules that are referenced in
