@@ -271,7 +271,10 @@ impl TransitiveClosure {
         all_sccs.iter().traverse(|c| {
             for &v in &self.condensed_to_mod[c] {
                 let rv = self.module_refs.get(v);
-                affected.insert(f_out(&rv));
+                let out = f_out(&rv);
+                if !out.is_empty() {
+                    affected.insert(out);
+                }
             }
             ControlFlow::Continue(())
         });
