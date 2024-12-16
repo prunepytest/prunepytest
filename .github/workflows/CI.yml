@@ -61,7 +61,7 @@ jobs:
       - name: pytest
         if: matrix.platform.target == 'x86_64'
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
+          export INSTALL_ARGS="--find-links dist --no-index prunepytest"
           ./runtests.sh
 
   linux-coverage:
@@ -80,10 +80,23 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov, cargo-nextest
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --out dist
+          working-directory: pyext
+          manylinux: auto
+          # make sure the wheel is build with coverage enabled
+          before-script-linux: |
+            source <(cargo llvm-cov show-env --export-prefix)
+      # TODO: rename/tag/munge wheel appropriately and upload somewhere
+      # for coverage-enabled runs of prunetestpy-validation suite
       - name: pytest
         run: |
+          export INSTALL_ARGS="--find-links dist --no-index prunepytest"
           RUST_COVERAGE=1 ./runtests.sh
-      # TODO upload rust coverage results
+      # TODO upload coverage results
 
   linux-native:
     runs-on: ${{ matrix.platform.runner }}
@@ -105,7 +118,7 @@ jobs:
           path: pyext/dist
       - name: pytest
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
+          export INSTALL_ARGS="--find-links dist --no-index prunepytest"
           ./runtests.sh
 
   linux-docker:
@@ -137,7 +150,7 @@ jobs:
             uv python install ${{ matrix.python-version }}
           run: |
             set -e
-            export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
+            export INSTALL_ARGS="--find-links dist --no-index prunepytest"
             PY_COVERAGE=0 ./runtests.sh
 
   windows:
@@ -216,7 +229,7 @@ jobs:
           path: pyext/dist
       - name: pytest
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index --force-reinstall prunepytest"
+          export INSTALL_ARGS="--find-links dist --no-index prunepytest"
           ./runtests.sh
 
 

@@ -69,7 +69,7 @@ if (( "$pyminor" > 7 )) && [[ "${PY_COVERAGE:-1}" == "1" ]]; then
   export PY_COVERAGE=1
   libpath=".venv/lib/python$pyver"
   cover_args=(-m slipcover --source $libpath/site-packages/prunepytest)
-  if [[ -n "${EXTRA_TESTS}" ]] ; then
+  if [[ -n "${EXTRA_TESTS:-}" ]] ; then
     cover_args+=(--json --out cov.main.json)
   fi
   python "${cover_args[@]}" -m pytest --rootdir python
