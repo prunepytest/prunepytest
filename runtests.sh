@@ -1,5 +1,5 @@
 #! /bin/bash
-set -eu -o pipefail
+set -eu -x -o pipefail
 
 readonly abs_dir=$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
 
@@ -28,6 +28,11 @@ if (( "$pyminor" > 7 )); then
   if [[ "${PY_COVERAGE:-1}" == "1" ]] ; then
     "${install_deps[@]}" requirements-dev.txt
   else
+    # filter out slipcover when python coverage is disabled
+    # NB: part of the reason we allow disabling coverage on platforms that slipcover
+    # does support is because binary wheels are not provided for all of those, and
+    # building those wheels requires a full C/C++ toolchain, which is particularly
+    # expensive to install in the virtualized arm64 tests on github actions
     "${install_deps[@]}" <(grep -Fv slipcover requirements-dev.txt)
   fi
 else
@@ -40,34 +45,37 @@ if [[ -z "${INSTALL_ARGS:-}" ]] ; then
     cargo llvm-cov show-env --export-prefix > .cov.env
     source .cov.env
     cargo llvm-cov clean --workspace
-    # manylinux compat without going into  container
-    # TODO: restrict to linux
-    pip install maturin[zig]
-    maturin_mode=(--zig)
   else
     maturin_mode=(--release)
   fi
 
-  # auto-build and install wheel
-  "${pip[@]}" install \
-    "$("${maturin[@]}" build ${maturin_mode+"${maturin_mode[@]}"} 2>&1 \
-    | tee /dev/stderr \
-    | grep -F 'Built wheel' \
-    |  grep -Eo '[^ ]+.whl$' \
-    )" --force-reinstall
-else
-  # NB: lack of quotes around ${INSTALL_ARGS} is intentional
-  "${pip[@]}" install ${INSTALL_ARGS}
+  new_wheel="$("${maturin[@]}" build ${maturin_mode+"${maturin_mode[@]}"} 2>&1 \
+      | tee /dev/stderr \
+      | grep -F 'Built wheel' \
+      |  grep -Eo '[^ ]+.whl$' \
+      )"
+
+  INSTALL_ARGS="${new_wheel}"
 fi
+
+# NB: lack of quotes around ${INSTALL_ARGS} is intentional
+"${pip[@]}" install ${INSTALL_ARGS} --force-reinstall
 
 echo
 # slipcover does not support 3.7, but we still do
 if (( "$pyminor" > 7 )) && [[ "${PY_COVERAGE:-1}" == "1" ]]; then
   echo "--- pytest, with coverage"
-  # TODO: enforce coverage thresholds
+  # for extra tests below...
+  export PY_COVERAGE=1
   libpath=".venv/lib/python$pyver"
-  python -m slipcover --source $libpath/site-packages/prunepytest -m pytest --rootdir python
+  cover_args=(-m slipcover --source $libpath/site-packages/prunepytest)
+  if [[ -n "${EXTRA_TESTS}" ]] ; then
+    cover_args+=(--json --out cov.main.json)
+  fi
+  python "${cover_args[@]}" -m pytest --rootdir python
 else
+  # for extra tests below...
+  export PY_COVERAGE=0
   echo "--- pytest, without coverage (${pyver} not supported by slipcover)"
   python -m pytest --rootdir python
 fi
@@ -81,11 +89,25 @@ fi
 
 cd "${abs_dir}"
 
+# TODO: support running rust tests without coverage?
 if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
   echo
   echo "--- rust tests"
   cargo nextest run
+fi
 
+if [[ -n "${EXTRA_TESTS:-}" ]] ; then
+  echo
+  echo "--- extra tests: ${EXTRA_TESTS}"
+  export PRUNEPYTEST_INSTALL="${INSTALL_ARGS}"
+  export PY_COVERAGE_OUT="$(pwd)/cov.extra.json"
+  ${EXTRA_TESTS}
+
+  python -m slipcover --out cov.merged.json --merge pyext/cov.main.json cov.extra.json
+  # TODO: show report for merged coverage file
+fi
+
+if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
   echo
   echo "--- rust coverage"
   cargo llvm-cov report --html
