@@ -31,7 +31,7 @@ def test_plugin_select_noop(pytester):
     )
 
     pytester.plugins = ["prunepytest"]
-    result = pytester.runpytest("--prune", "--prune-modified-files=")
+    result = pytester.runpytest("--prune", "--prune-modified=")
     result.assert_outcomes()
 
 
@@ -52,7 +52,7 @@ def test_plugin_select_code(pytester):
 
     pytester.plugins = ["prunepytest"]
     result = pytester.runpytest(
-        "--prune", "--prune-modified-files=" + os.path.join("blah", "stuff.py")
+        "--prune", "--prune-modified=" + os.path.join("blah", "stuff.py")
     )
     result.assert_outcomes(passed=1)
 
@@ -74,7 +74,7 @@ def test_plugin_select_test(pytester):
 
     pytester.plugins = ["prunepytest"]
     result = pytester.runpytest(
-        "--prune", "--prune-modified-files=" + os.path.join("blah", "stuff.py")
+        "--prune", "--prune-modified=" + os.path.join("blah", "stuff.py")
     )
     result.assert_outcomes(passed=1)
 
