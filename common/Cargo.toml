@@ -24,3 +24,11 @@ regex = { workspace = true }
 speedy = { workspace = true }
 hi_sparse_bitset = { workspace = true }
 zstd = { workspace = true }
+
+[dev-dependencies]
+divan = "0.1.17"
+rand = "0.8.5"
+
+[[bench]]
+name = "matcher"
+harness = false

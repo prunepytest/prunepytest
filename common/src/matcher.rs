@@ -21,12 +21,16 @@ impl MatcherNode {
         }
     }
 
-    pub fn from<V: AsRef<str>, T: IntoIterator<Item = V>>(values: T, sep: char) -> MatcherNode {
+    pub fn from_iter<V: AsRef<str>, T: Iterator<Item = V>>(values: T, sep: char) -> MatcherNode {
         let mut tree = Self::new();
         for val in values {
             tree.add(val.as_ref(), sep);
         }
         tree
+    }
+
+    pub fn from<V: AsRef<str>, T: IntoIterator<Item = V>>(values: T, sep: char) -> MatcherNode {
+        MatcherNode::from_iter(values.into_iter(), sep)
     }
 
     pub fn add(&mut self, val: &str, sep: char) {
