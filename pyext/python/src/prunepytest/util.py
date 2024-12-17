@@ -23,6 +23,9 @@ mono_ref = time.monotonic_ns()
 
 
 def print_with_timestamp(*args: Any, **kwargs: Any) -> None:
+    """
+    Helper function to print to stdout, with a prefix indicating elapsed process time in millisecond
+    """
     wall_elapsed_ms = (time.monotonic_ns() - mono_ref) // 1_000_000
     (kwargs["file"] if "file" in kwargs else sys.stdout).write(
         "[+{: 8}ms] ".format(wall_elapsed_ms)
@@ -31,6 +34,16 @@ def print_with_timestamp(*args: Any, **kwargs: Any) -> None:
 
 
 def import_file(name: str, filepath: str) -> Any:
+    """
+    Import arbitrary Python code from a filepath
+
+    This is used to import project-specific hooks that implement .api.Hook
+    to alter the behavior of the pytest plugin or import-time validator
+
+    :param name: name under which to import the module
+    :param filepath: path of Python module to import
+    :return: module object
+    """
     spec = importlib.util.spec_from_file_location(name, filepath)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -42,6 +55,7 @@ def import_file(name: str, filepath: str) -> Any:
 
 @contextmanager
 def chdir(d: str) -> Generator[None, None, None]:
+    """simple context manager to change current working directory"""
     prev = os.getcwd()
     os.chdir(d)
     try:
@@ -51,6 +65,11 @@ def chdir(d: str) -> Generator[None, None, None]:
 
 
 def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph:
+    """
+    Helper function to load a module import graph, either from a serialized
+    file if available, or by parsing the relevant Python source code, based
+    on a Hook specification
+    """
     # TODO: we could move most of this into a separate thread
     # load graph from file if provided, otherwise parse the repo
     if file and os.path.exists(file):
@@ -81,6 +100,9 @@ def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph
 
 
 def find_package_roots(root: pathlib.PurePath) -> Set[pathlib.PurePath]:
+    """
+    Helper function to find the root paths of Python packages within a file tree
+    """
     # TODO: parallel rust implementation?
     pkgs = set()
     with os.scandir(root) as it:
@@ -96,6 +118,11 @@ def find_package_roots(root: pathlib.PurePath) -> Set[pathlib.PurePath]:
 
 
 def infer_py_pkg(filepath: str) -> str:
+    """
+    Given the file path to a Python module, infer the corresponding Python import path
+
+    NB: This relies on the presence of explicit __init__.py
+    """
     parent = os.path.dirname(filepath)
     while parent and os.path.exists(os.path.join(parent, "__init__.py")):
         parent = os.path.dirname(parent)
@@ -105,6 +132,9 @@ def infer_py_pkg(filepath: str) -> str:
 def infer_ns_pkg(
     pkgroot: pathlib.PurePath, root: Optional[pathlib.PurePath] = None
 ) -> Tuple[pathlib.PurePath, str]:
+    """
+    Helper function to recognize pkgutil-style namespace packages
+    """
     # walk down until first __init__.py without recognizable ns extend stanza
 
     from . import file_looks_like_pkgutil_ns_init
@@ -130,6 +160,7 @@ def infer_ns_pkg(
 
 
 def parse_toml(filepath: str) -> Dict[str, Any]:
+    """Helper function to parse a file in TOML format"""
     pyver = sys.version_info
     target = "tomllib" if pyver[0] == 3 and pyver[1] >= 11 else "tomli"
     try:
@@ -143,6 +174,7 @@ def parse_toml(filepath: str) -> Dict[str, Any]:
 
 
 def toml_xtract(cfg: Dict[str, Any], cfg_path: str) -> Any:
+    """helper function to extract nested values by path within a parsed TOML config"""
     head, _, tail = cfg_path.partition(".")
     if head not in cfg:
         return None
@@ -154,6 +186,15 @@ def toml_xtract(cfg: Dict[str, Any], cfg_path: str) -> Any:
 def filter_packages(
     pkg_roots: Set[pathlib.PurePath], pyproject: Dict[str, Any]
 ) -> Set[pathlib.PurePath]:
+    """
+    Given a set of package roots, and a parsed pyproject.toml, filter out
+    irrelevant source roots
+
+    This is a best-effort approach to handle projects with slight deviations
+    from conventional source layouts, to maximize the applicability of the
+    default Hook implementation. For more complicated cases, custom Hook
+    implementations may be warranted.
+    """
     # TODO: support poetry/hatch/maturin/...?
     filtered = pkg_roots
 
@@ -170,7 +211,8 @@ def hook_default(
     cls: Type[DefaultHook_T] = DefaultHook,  # type: ignore[assignment]
 ) -> DefaultHook_T:
     """
-    Try to infer global and local namespaces, for sane zero-conf behavior
+    Constructs a DefaultHook, configured with sane defaults based on
+    scanning the contents of the given root path
     """
     # make paths relative to root for easier manipulation
     pkg_roots = {r.relative_to(root) for r in find_package_roots(root)}
@@ -218,6 +260,15 @@ def hook_default(
 
 # NB: base_cls can be abstract, ignore mypy warnings at call site...
 def load_hook(root: pathlib.Path, hook: str, base_cls: Type[Hook_T]) -> Hook_T:
+    """
+    Helper function to load a Hook implementation for a given base class
+
+    If the given file has multiple Hook implementations, the first one that covers
+    the requested type will be selected.
+
+    Custom implementations may subclass DefaultHook, as long as their __init__
+    method, if provided, has a signature compatible with that of DefaultHook.
+    """
     hook_mod_name = "prunepytest._hook"
     hook_mod = import_file(hook_mod_name, str(root / hook))
 

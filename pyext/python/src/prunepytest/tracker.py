@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
+# NB: stdlib imports only
 import builtins
 import importlib
 import io
@@ -24,8 +25,6 @@ from typing import (
     Union,
 )
 
-from . import __path__ as _pkg_path
-
 
 IGNORED_FRAMES = {
     __file__,
@@ -35,7 +34,16 @@ IGNORED_FRAMES = {
 }
 
 
+_pkg_path: Optional[Tuple[str, ...]] = None
+
+
 def warning_skip_level() -> int:
+    global _pkg_path
+    if _pkg_path is None:
+        from . import __path__ as _pp
+
+        _pkg_path = tuple(_pp)
+
     """
     Compute the correct value of stacklevel to pass to warnings.warn in order
     to skip all internal frames and point directly at the location of an
@@ -48,7 +56,7 @@ def warning_skip_level() -> int:
     skip = 1
     while True:
         f = sys._getframe(lvl)
-        if f.f_code.co_filename.startswith(tuple(_pkg_path)):
+        if f.f_code.co_filename.startswith(_pkg_path):
             skip += 1
         elif not warnings._is_internal_frame(f):  # type: ignore[attr-defined]
             break
@@ -123,6 +131,28 @@ def _builtins_import_no_cache(
 #   - https://docs.python.org/3/reference/datamodel.html#import-related-attributes-on-module-objects
 #   - https://github.com/python/cpython/blob/v3.13.0/Lib/importlib/_bootstrap.py
 class Tracker:
+    """
+    Tracker is the heart of the validation logic
+
+    We want to make sure that the module import graph derived by parsing the Python code
+    is accurate. At least accurate enough that when we compute a set of affected test files
+    based on a set of modified files, we do not accidentally miss relevant test files.
+
+    To achieve that, Tracker hooks into the Python import machinery, before any code covered
+    by the import graph is loaded. Then as module gets loaded, Tracker recognizes the one that
+    are relevant, and builds a transitive closure of the *actual* Python import graph, including
+    both static and dynamic imports.
+
+    This actual import graph can then be compared against the Rust-derived one that only relies
+    on static information (and whatever extra information is provided by project-specific hooks),
+    to ensure that the Rust-derived one is a *superset* of the one obtain by the Python Tracker.
+
+    The concept is fairly simple, and the implementation is reasonably straightforward, but there
+    are some notable fiddly corner-cases to ensure robust tracking regardless of the order in
+    which code is imported, of the presence of import cycles, and of the need to track, and
+    possibly aggregate, dynamic imports.
+    """
+
     __slots__ = (
         "stack",
         "cxt",
@@ -222,6 +252,12 @@ class Tracker:
             print("--- start tracking ---", file=self.log_file)
 
         def _new_find_and_load(name: str, import_: Any) -> Any:
+            """
+            Helper function that wraps importlib._bootstrap._find_and_load, and
+            separates relevancy checks, and dynamic import detection and
+            aggregation, from the core of the import tracking logic that lives
+            in _find_and_load_helper
+            """
             # only track relevant namespace
             base_ns = name.partition(".")[0]
             if base_ns not in self.prefixes:
@@ -265,6 +301,11 @@ class Tracker:
         def _new_handle_fromlist(
             module: types.ModuleType, fromlist: Any, import_: Any, **kwargs: Any
         ) -> Any:
+            """
+            Helper function that wraps importlib._bootstrap._handle_fromlist
+            to ensure consistent import tracking despite caching logic in
+            the Python import machinery
+            """
             if hasattr(module, "__path__"):
                 base_ns = module.__name__.partition(".")[0]
                 if base_ns in self.prefixes:
@@ -354,6 +395,15 @@ class Tracker:
         self.cxt = down
 
     def with_dynamic(self, m: str) -> Set[str]:
+        """
+        combine import data with aggregated dynamic imports, to provide a fuller,
+        and safer picture of all the possible transitive imports for a given
+        module.
+
+        aggregation of dynamic imports across multiple call sites is necessary
+        for accuracy in the face of caching of dynamic imports in the code under
+        test.
+        """
         dyn = {
             i
             for u in self.dynamic_users.get(m, ())
@@ -362,6 +412,9 @@ class Tracker:
         return self.tracked[m] | dyn
 
     def _find_and_load_helper(self, name: str, import_: Any, is_ignored: bool) -> Any:
+        """
+        _find_and_load_helper is the core of the import tracking logic
+        """
         new_context = False
         if not is_ignored:
             # NB: defer import callback until successful import below
@@ -548,6 +601,14 @@ class Tracker:
     def record_dynamic_imports(
         self, tb: traceback.StackSummary
     ) -> Tuple[int, Optional[Tuple[str, str]], bool]:
+        """
+        Given a traceback, collected before processing a new import, scan the
+        stack frames to determine if this import originated from a static import
+        statement, or from a dynamic function call.
+
+        If the latter, pick the most relevant aggregation point, if any, or determine
+        whether to ignore this dynamic import entirely
+        """
         # walk down the stack until we either find a recognizable dynamic import,
         # our import hook, or an import from the validator
         n = len(tb)

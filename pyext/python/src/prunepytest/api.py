@@ -13,24 +13,99 @@ class BaseHook(ABC):
     """
 
     def setup(self) -> None:
+        """
+        setup() is called once, after the Hook object is created, and before it
+        is used by either the pytest plugin or the import-time validator.
+
+        Crucially, it is called *after* creating a Tracker object, but before any
+        other Hook methods are invoked, which means it is the first point where it
+        is safe to import project-specific code
+        """
         pass
 
     @abstractmethod
-    def global_namespaces(self) -> AbstractSet[str]: ...
+    def global_namespaces(self) -> AbstractSet[str]:
+        """
+        returns a set of python import path prefixes to be collected by ModuleGraph,
+        and tracked by Tracker
+
+        entries in this set form a unified "global" namespace that might be spread
+        across multiple distinct file trees, where duplicate import paths cannot
+        exist in separate subtrees
+        """
+        ...
 
     @abstractmethod
-    def local_namespaces(self) -> AbstractSet[str]: ...
+    def local_namespaces(self) -> AbstractSet[str]:
+        """
+        returns a set of python import path prefixes to be collected by ModuleGraph,
+        and tracked by Tracker
+
+        entries in this set form fragmented "local" namespace that might be spread
+        across multiple distinct file trees, where duplicate import paths are allowed
+        to exist in separate subtrees, and each individual subtree is isolated, being
+        only allowed to refer to import path in itself, or in the global namespace,
+        but not to any other local namespaces.
+        """
+        ...
 
     @abstractmethod
-    def source_roots(self) -> Mapping[str, str]: ...
+    def source_roots(self) -> Mapping[str, str]:
+        """
+        returns a mapping from filesystem path to corresponding python import prefix
+
+        All paths in this mapping will be recursively searched for python code to parse
+        and extract import data from.
+
+        This mapping includes paths for both global and local namespaces.
+
+        The python import prefixes MUST be unique for file trees that belong in the global
+        namespace. No such restriction exists for file trees that belong to the local
+        namespace.
+        """
+        ...
 
     def include_typechecking(self) -> bool:
+        """
+        whether to skip collecting import statements guarded by `if TYPE_CHECKING`
+        statements.
+
+        Such imports are ignored by default, but some packages might need them to be
+        collected to compute an accurate import graph. This is true of pydantic v2
+        for instance, which does a fair amount of dynamic import magic in its __init__.py
+        and makes that legible through type-checking-gated imports.
+        """
         return False
 
     def external_imports(self) -> AbstractSet[str]:
+        """
+        returns a set of python import prefix to be collected by ModuleGraph,
+        and tracked by Tracker
+
+        This is intended for import path that do not have corresponding Python source code,
+        either because they are external to the project under test, or because they point
+        to native code extensions.
+        """
         return frozenset()
 
     def dynamic_dependencies(self) -> Mapping[str, AbstractSet[str]]:
+        """
+        returns extra dependency information to be added to ModuleGraph after parsing
+        the Python code, to account for use of dynamic imports inside the code.
+
+        The keys of this mapping may be either python import paths, or file paths.
+        Either way, they must point to Python module that are part of the collected
+        import graph, either directly (valid source files under the input source_roots)
+        or indirectly (referred to in an import statement within valid source files under
+        the input source_roots).
+
+        The values are sets of Python import paths to be considered as extra are direct
+        (dynamic) dependencies of the corresponding module.
+
+        These extra dependency edges are added to ModuleGraph before computing the
+        transitive closure and are therefore propagated automatically across the whole
+        import graph.
+        """
         return {}
 
     def dynamic_dependencies_at_leaves(
@@ -39,6 +114,27 @@ class BaseHook(ABC):
         Sequence[Tuple[str, AbstractSet[str]]],
         Sequence[Tuple[str, Mapping[str, AbstractSet[str]]]],
     ]:
+        """
+        returns extra dependency information to be added to ModuleGraph after parsing
+        the Python code, to account for use of dynamic imports inside the code.
+
+        These extra dependency edges are added to ModuleGraph *after* computing the
+        transitive closure, and for performance reasons, are only applied to *leaves*
+        of the import graph (i.e. modules that are not being imported by any other
+        module, which typically means test files or command line entry points)
+
+        Because they are applied after computing the transitive closure, the order in
+        which they are added matters, hence the use of sequences instead of mappings.
+
+        The first sequence is for dynamic imports that are *consistent* across the whole
+        import graph. It follows the same format as dynamic_dependencies above.
+
+        The second sequence is for dynamic imports that might *vary* between different
+        subtrees. The first-level key is a python import path or file path, as before,
+        but now there is a second-level key, the filepath of a source_root, as each
+        source root may get a different set of dynamic dependencies, based, for instance,
+        on config files.
+        """
         return (), ()
 
 
@@ -72,9 +168,22 @@ class ValidatorMixin(ABC):
     """
 
     @abstractmethod
-    def test_folders(self) -> Mapping[str, str]: ...
+    def test_folders(self) -> Mapping[str, str]:
+        """
+        returns a list of filepaths containing test files
+
+        These paths may be among the source_roots, or nested arbitrarily deep under
+        any source_root
+        """
+        ...
 
     def is_test_file(self, name: str) -> bool:
+        """
+        Checks whether a given file name is expected to contain test code
+
+        The default implementation reflects the default discovery rules from pytest:
+            test_*.py and *_test.py are matched
+        """
         # https://docs.pytest.org/en/latest/explanation/goodpractices.html#test-discovery
         # NB: can be overridden via config, hence this being part of the hook API surface
         return (name.startswith("test_") and name.endswith(".py")) or name.endswith(
@@ -82,15 +191,29 @@ class ValidatorMixin(ABC):
         )
 
     def should_capture_stdout(self) -> bool:
+        """whether to capture stdout during import-time validation runs"""
         return True
 
     def should_capture_stderr(self) -> bool:
+        """whether to capture stderr during import-time validation runs"""
         return True
 
     def before_folder(self, fs: str, py: str) -> None:
+        """
+        callback invoked by import-time validator before validating each
+        entry in test_folders
+
+        This is only called for the top-level paths, not for each subfolder.
+        """
         pass
 
     def after_folder(self, fs: str, py: str) -> None:
+        """
+        callback invoked by import-time validator after validating each
+        entry in test_folders
+
+        This is only called for the top-level paths, not for each subfolder.
+        """
         pass
 
     def before_file(
@@ -99,6 +222,10 @@ class ValidatorMixin(ABC):
         dent: os.DirEntry,  # type: ignore
         import_prefix: str,
     ) -> None:
+        """
+        callback invoked by import-time validator before validating each
+        python test file encountered under a test_folder
+        """
         pass
 
     def after_file(
@@ -107,6 +234,10 @@ class ValidatorMixin(ABC):
         dent: os.DirEntry,  # type: ignore
         import_prefix: str,
     ) -> None:
+        """
+        callback invoked by import-time validator after validating each
+        python test file encountered under a test_folder
+        """
         pass
 
 
@@ -116,18 +247,44 @@ class PluginHook(BaseHook, TrackerMixin, metaclass=ABCMeta):
     """
 
     def always_run(self) -> AbstractSet[str]:
+        """
+        returns a set of test files, or individual test cases, that should
+        never be de-selected, regardless of modified files and the import
+        graph data, and should be excluded from test-time import validation.
+
+        This is intended to exclude particularly gnarly files from test
+        selection and test-time import validation. For instance, tests
+        who might perform dynamic import based on data, or environment state
+        that are impractical to encode into the import graph
+
+        NB: this does *not* affect the import-time validator
+        """
         return frozenset()
 
 
 class ValidatorHook(PluginHook, ValidatorMixin, metaclass=ABCMeta):
     """
-    Full API used by validator.py
+    Full API used by import-time validator
     """
 
     pass
 
 
 class DefaultHook(ValidatorHook):
+    """
+    A default Hook implementation, that supports the full API required for
+    the pytest plugin and the pre-test validator, based on a handful of
+    static values.
+
+    This is meant to provide sensible defaults based on prevalent Python
+    conventions, and best-effort parsing of common configuration files,
+    such as pyproject.toml
+
+    It can be used as a base class for custom Hook implementations where
+    most of the default behaviors are fine, and a only few settings need
+    tweaking.
+    """
+
     __slots__ = ("global_ns", "local_ns", "src_roots", "tst_dirs", "tst_file_pattern")
 
     def __init__(
