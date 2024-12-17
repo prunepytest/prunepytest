@@ -201,7 +201,11 @@ In cases where the import graph is large and slow to build, it can be worth savi
 in a serialized form to reuse across multiple commands.
 
 ```bash
-python -m prunepytest.validate --prune-graph graph.bin
+# collect and save import graph
+# NB: this is a no-op if a valid graph exists
+python -m prunepytest.util graph --prune-graph graph.bin
+
+# use the existing graph instead of parsing source code again
 pytest --prune --prune-graph graph.bin
 ```
 
