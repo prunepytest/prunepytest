@@ -100,17 +100,13 @@ impl ModuleGraph {
             .map_err(|e| PyErr::new::<PyException, _>(e.to_string()))
     }
 
-    #[pyo3(signature = (simple_unified, simple_per_package))]
+    #[pyo3(signature = (per_package))]
     fn add_dynamic_dependencies_at_leaves(
         &mut self,
         py: Python<'_>,
-        simple_unified: Vec<(String, HashSet<String>)>,
-        simple_per_package: Vec<(String, HashMap<String, HashSet<String>>)>,
+        per_package: Vec<(String, HashMap<String, HashSet<String>>)>,
     ) -> PyResult<()> {
-        py.allow_threads(|| {
-            self.tc
-                .apply_dynamic_edges_at_leaves(&simple_unified, &simple_per_package)
-        });
+        py.allow_threads(|| self.tc.add_dynamic_dependencies_at_leaves(&per_package));
         Ok(())
     }
 

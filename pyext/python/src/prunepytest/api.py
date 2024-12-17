@@ -99,7 +99,7 @@ class BaseHook(ABC):
         or indirectly (referred to in an import statement within valid source files under
         the input source_roots).
 
-        The values are sets of Python import paths to be considered as extra are direct
+        The values are sets of Python import paths to be considered as extra direct
         (dynamic) dependencies of the corresponding module.
 
         These extra dependency edges are added to ModuleGraph before computing the
@@ -110,32 +110,30 @@ class BaseHook(ABC):
 
     def dynamic_dependencies_at_leaves(
         self,
-    ) -> Tuple[
-        Sequence[Tuple[str, AbstractSet[str]]],
-        Sequence[Tuple[str, Mapping[str, AbstractSet[str]]]],
-    ]:
+    ) -> Sequence[Tuple[str, Mapping[str, AbstractSet[str]]]]:
         """
         returns extra dependency information to be added to ModuleGraph after parsing
         the Python code, to account for use of dynamic imports inside the code.
 
-        These extra dependency edges are added to ModuleGraph *after* computing the
-        transitive closure, and for performance reasons, are only applied to *leaves*
-        of the import graph (i.e. modules that are not being imported by any other
-        module, which typically means test files or command line entry points)
+        This is intended to account for dynamic dependencies that are incurred by modules
+        within the global namespace but whose actual reach might *vary* across source
+        roots.
 
-        Because they are applied after computing the transitive closure, the order in
-        which they are added matters, hence the use of sequences instead of mappings.
+        In that case, we cannot simply incorporate dynamic dependencies directly within
+        the global namespace. Instead, we only want to affect *leaves* of the import
+        graph (i.e. modules that are not imported by any other module, which typically
+        means test files or command line entry points). This in turns means we need to
+        add those *after* computing the transitive closure, which means the order in
+        which they are added matters, hence the use of a sequence of item, instead of
+        a mapping.
 
-        The first sequence is for dynamic imports that are *consistent* across the whole
-        import graph. It follows the same format as dynamic_dependencies above.
-
-        The second sequence is for dynamic imports that might *vary* between different
-        subtrees. The first-level key is a python import path or file path, as before,
-        but now there is a second-level key, the filepath of a source_root, as each
-        source root may get a different set of dynamic dependencies, based, for instance,
-        on config files.
+        The first key of each item (i.e. the first element of the tuple), is a Python
+        import path, or file path, as in dynamic_dependencies. The second key, in the
+        mapping, is the filesystem path to a source root, as each source root now gets
+        a distinct set of dynamic dependencies. The value, in the mapping, is a set of
+        extra direct dependencies to be added to the import graph.
         """
-        return (), ()
+        return tuple()
 
 
 class TrackerMixin:

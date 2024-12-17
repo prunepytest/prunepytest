@@ -191,13 +191,12 @@ impl TransitiveClosure {
         self.write_to_stream_with_ctx(LittleEndian::default(), stream)
     }
 
-    pub fn apply_dynamic_edges_at_leaves(
+    pub fn add_dynamic_dependencies_at_leaves(
         &mut self,
-        simple_unified: &Vec<(String, HashSet<String>)>,
         simple_per_package: &Vec<(String, HashMap<String, HashSet<String>>)>,
     ) {
         // self.to_small_text_file("pre-dyn.txt").unwrap();
-        apply_dynamic_edges_at_leaves(self, simple_unified, simple_per_package);
+        add_dynamic_dependencies_at_leaves(self, simple_per_package);
         // self.to_small_text_file("post-dyn.txt").unwrap();
     }
 
@@ -462,18 +461,10 @@ fn convert_deps(
     extra_deps
 }
 
-pub fn apply_dynamic_edges_at_leaves(
+pub fn add_dynamic_dependencies_at_leaves(
     tc: &mut TransitiveClosure,
-    unified: &Vec<(String, HashSet<String>)>,
     per_package: &Vec<(String, HashMap<String, HashSet<String>>)>,
 ) {
-    for (trigger, extra_deps) in unified {
-        if let Some(mod_ref) = tc.module_refs.first_matching_ref(ustr(trigger)) {
-            let c = tc.mod_to_condensed[mod_ref as usize];
-            let cd = convert_deps(tc, c, extra_deps);
-            apply_unified_trigger(tc, c, &cd);
-        }
-    }
     for (trigger, per_pkg_deps) in per_package {
         if let Some(mod_ref) = tc.module_refs.first_matching_ref(ustr(trigger)) {
             let c = tc.mod_to_condensed[mod_ref as usize];
@@ -517,36 +508,6 @@ fn apply_trigger(
                 .unwrap()
                 .insert(triggered);
         }
-    }
-}
-
-fn apply_unified_trigger(
-    tc: &mut TransitiveClosure,
-    trigger: CondensedRef,
-    extra_deps: &CondensedEdges,
-) {
-    for triggered in &tc.ancestor[trigger] {
-        if triggered == trigger {
-            continue;
-        }
-        // NB: only add successors to SCCs that have no ancestors themselves
-        if !&tc.ancestor[triggered].is_empty() {
-            continue;
-        }
-        // eprintln!("apply {:?} to {:?} add {}",
-        //     tc.condensed_to_mod.get(trigger).unwrap()
-        //       .iter().map(|&v| tc.module_refs.py_for_ref(v)).collect::<Vec<_>>(),
-        //     tc.condensed_to_mod.get(triggered).unwrap()
-        //       .iter().map(|&v| tc.module_refs.py_for_ref(v)).collect::<Vec<_>>(),
-        //     extra_deps.iter().count(),
-        // );
-        apply_trigger(
-            &mut tc.successor,
-            &tc.ancestor,
-            trigger,
-            triggered,
-            extra_deps,
-        );
     }
 }
 

@@ -19,8 +19,7 @@ class ModuleGraph:
     def unresolved(self) -> Mapping[str, AbstractSet[str]]: ...
     def add_dynamic_dependencies_at_leaves(
         self,
-        simple_unified: Sequence[Tuple[str, AbstractSet[str]]],
-        simple_per_package: Sequence[Tuple[str, Mapping[str, AbstractSet[str]]]],
+        per_package: Sequence[Tuple[str, Mapping[str, AbstractSet[str]]]],
     ) -> None: ...
     def file_depends_on(self, filepath: str) -> Optional[AbstractSet[str]]: ...
     def module_depends_on(
