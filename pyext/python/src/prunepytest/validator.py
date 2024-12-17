@@ -43,7 +43,6 @@ import importlib
 import importlib.util
 import io
 import os
-import pathlib
 import sys
 import traceback
 
@@ -55,8 +54,8 @@ from .tracker import Tracker, print_clean_traceback
 from .util import (
     print_with_timestamp,
     load_import_graph,
-    load_hook,
-    hook_default,
+    load_hook_or_default,
+    parse_args,
 )
 
 
@@ -216,11 +215,7 @@ def validate_folder(
 def validate(
     hook_path: Optional[str], graph_path: Optional[str] = None
 ) -> Tuple[int, int]:
-    hook = (
-        load_hook(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
-        if hook_path
-        else hook_default(pathlib.Path.cwd())
-    )
+    hook = load_hook_or_default(hook_path)
 
     t = Tracker()
     t.start_tracking(
@@ -283,25 +278,7 @@ def validate(
 
 
 if __name__ == "__main__":
-    i = 1
-    hook_path = None
-    graph_path = None
-    while i < len(sys.argv):
-        if sys.argv[i] in {"--prune-hook", "--hook", "-h"}:
-            if len(sys.argv) < i + 2:
-                print(f"missing value for {sys.argv[i]} argument")
-                sys.exit(2)
-            hook_path = sys.argv[i + 1]
-            i += 2
-        elif sys.argv[i] in {"--prune-graph", "--graph", "-g"}:
-            if len(sys.argv) < i + 2:
-                print(f"missing value for {sys.argv[i]} argument")
-                sys.exit(2)
-            graph_path = sys.argv[i + 1]
-            i += 2
-        else:
-            print(f"invalid argument {sys.argv[i]}")
-            sys.exit(2)
+    hook_path, graph_path = parse_args(sys.argv[1:])
 
     # TODO: support override from hook
     from ._prunepytest import configure_logger

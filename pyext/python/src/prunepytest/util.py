@@ -8,12 +8,11 @@ import time
 import warnings
 from contextlib import contextmanager
 from fnmatch import fnmatch
-from typing import cast, Any, Dict, Generator, Optional, Set, Tuple, Type, TypeVar
+from typing import cast, Any, Dict, Generator, List, Optional, Set, Tuple, Type, TypeVar
 
 
 from .graph import ModuleGraph
-from .api import DefaultHook, BaseHook
-
+from .api import DefaultHook, BaseHook, ValidatorHook
 
 Hook_T = TypeVar("Hook_T", bound=BaseHook)
 DefaultHook_T = TypeVar("DefaultHook_T", bound=DefaultHook)
@@ -288,3 +287,47 @@ def load_hook(root: pathlib.Path, hook: str, base_cls: Type[Hook_T]) -> Hook_T:
         return val()
 
     raise ValueError(f"no implementation of {base_cls} found in {str(root / hook)}")
+
+
+def parse_args(args: List[str]) -> Tuple[Optional[str], Optional[str]]:
+    i = 0
+    hook_path = None
+    graph_path = None
+    while i < len(args):
+        if args[i] in {"--prune-hook", "--hook", "-h"}:
+            if len(args) < i + 2:
+                print(f"missing value for {args[i]} argument")
+                sys.exit(2)
+            hook_path = args[i + 1]
+            i += 2
+        elif args[i] in {"--prune-graph", "--graph", "-g"}:
+            if len(args) < i + 2:
+                print(f"missing value for {args[i]} argument")
+                sys.exit(2)
+            graph_path = args[i + 1]
+            i += 2
+        else:
+            print(f"invalid argument {args[i]}")
+            sys.exit(2)
+
+    return hook_path, graph_path
+
+
+def load_hook_or_default(hook_path: Optional[str]) -> ValidatorHook:
+    return (
+        load_hook(pathlib.Path.cwd(), hook_path, ValidatorHook)  # type: ignore[type-abstract]
+        if hook_path
+        else hook_default(pathlib.Path.cwd())
+    )
+
+
+if __name__ == "__main__":
+    if sys.argv[1] == "hook":
+        hook = load_hook_or_default(sys.argv[2] if len(sys.argv) > 2 else None)
+        # TODO: print some debug information?
+    elif sys.argv[1] == "graph":
+        hook_path, graph_path = parse_args(sys.argv[2:])
+        hook = load_hook_or_default(hook_path)
+        graph = load_import_graph(hook, graph_path)
+        if graph_path:
+            graph.to_file(graph_path)
