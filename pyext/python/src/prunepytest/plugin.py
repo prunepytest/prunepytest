@@ -51,9 +51,7 @@ def raise_(e: BaseException) -> None:
 
 
 def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
-    group = parser.getgroup(
-        "automatically select tests affected by changes (prune-py-test)"
-    )
+    group = parser.getgroup("prunepytest")
 
     group.addoption(
         "--prune",
@@ -79,10 +77,10 @@ def pytest_addoption(parser: Any, pluginmanager: Any) -> None:
     )
 
     group.addoption(
-        "--prune-modified-files",
+        "--prune-modified",
         action="store",
         type=str,
-        dest="prune_modified_files",
+        dest="prune_modified",
         help=(
             "Comma-separated list of modified files to use as basis for test selection."
             "The default behavior is to use data from the last git (or other supported VCS)"
@@ -194,8 +192,8 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
     if not opt.prune_noselect:
-        if opt.prune_modified_files is not None:
-            modified = opt.prune_modified_files.split(",")
+        if opt.prune_modified is not None:
+            modified = opt.prune_modified.split(",")
         elif vcs:
             modified = (
                 vcs.modified_files(base_commit=opt.prune_base_commit)

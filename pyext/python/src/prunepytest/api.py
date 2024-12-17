@@ -142,9 +142,17 @@ class TrackerMixin:
     """
 
     def import_patches(self) -> Optional[Mapping[str, Any]]:
+        """
+        returns a set of patches to apply immediately after importing code in Tracker
+
+        This is used by the import-time validator, to allow working-around gnarly
+        import-time side-effects that might not manifest during normal test execution
+        but may interfere with validation.
+        """
         return None
 
     def record_dynamic(self) -> bool:
+        """whether to track dynamic imports"""
         return False
 
     def implicit_anchor_aggregation(self) -> bool:
@@ -157,6 +165,9 @@ class TrackerMixin:
         return None
 
     def tracker_log(self) -> Optional[str]:
+        """
+        :return: an optional path to a file in which to store logs for Tracker
+        """
         return None
 
 
