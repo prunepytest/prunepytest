@@ -49,7 +49,7 @@ import traceback
 
 from typing import Callable, Dict, Set, Optional, Tuple
 
-from . import ModuleGraph
+from .graph import ModuleGraph
 from .api import ValidatorHook
 from .tracker import Tracker, print_clean_traceback
 from .util import (
@@ -304,7 +304,7 @@ if __name__ == "__main__":
             sys.exit(2)
 
     # TODO: support override from hook
-    from . import configure_logger
+    from ._prunepytest import configure_logger
 
     configure_logger("/dev/stdout", "info")
 

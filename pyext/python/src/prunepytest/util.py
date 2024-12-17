@@ -11,7 +11,7 @@ from fnmatch import fnmatch
 from typing import cast, Any, Dict, Generator, Optional, Set, Tuple, Type, TypeVar
 
 
-from . import ModuleGraph
+from .graph import ModuleGraph
 from .api import DefaultHook, BaseHook
 
 
@@ -137,7 +137,7 @@ def infer_ns_pkg(
     """
     # walk down until first __init__.py without recognizable ns extend stanza
 
-    from . import file_looks_like_pkgutil_ns_init
+    from ._prunepytest import file_looks_like_pkgutil_ns_init
 
     ns = pkgroot.name
     first_non_ns = root / pkgroot if root else pkgroot

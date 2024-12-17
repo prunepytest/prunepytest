@@ -22,7 +22,7 @@ from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
 from _pytest.tmpdir import TempPathFactory
 
-from . import ModuleGraph
+from .graph import ModuleGraph
 from .api import PluginHook, DefaultHook
 from .util import chdir, load_import_graph, load_hook, hook_default
 from .tracker import Tracker, relevant_frame_index, warning_skip_level
