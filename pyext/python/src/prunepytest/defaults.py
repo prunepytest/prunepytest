@@ -117,13 +117,27 @@ def filter_packages(
     default Hook implementation. For more complicated cases, custom Hook
     implementations may be warranted.
     """
-    # TODO: support poetry/hatch/maturin/...?
+    # TODO: support poetry/hatch/pdm/...?
     filtered = pkg_roots
 
     f = toml_xtract(pyproject, "tool.setuptools.packages.find.include")
     if f:
         print(f"filter pkg roots according to setuptools config: {f}")
-        filtered = {p for p in filtered if any(fnmatch(str(p), pat) for pat in f)}
+        filtered = {
+            p
+            for p in filtered
+            if any(fnmatch(str(p), pat) for pat in f) or p.name == "tests"
+        }
+
+    f = toml_xtract(pyproject, "tool.maturin.python-source")
+    if f:
+        print(f"filter pkg roots according to maturing python-source: {f}")
+        filtered = {p for p in filtered if str(p).startswith(f) or p.name == "tests"}
+
+    f = toml_xtract(pyproject, "tool.maturin.python-packages")
+    if f:
+        print(f"filter pkg roots according to maturing python-packages: {f}")
+        filtered = {p for p in filtered if p.name in f or p.name == "tests"}
 
     return filtered
 
@@ -139,6 +153,8 @@ def hook_default(
     # make paths relative to root for easier manipulation
     pkg_roots = {r.relative_to(root) for r in find_package_roots(root)}
 
+    # TODO: check for pyproject.toml at multiple levels
+    # ideally anywhere between root and the parent folder of each detected package root
     pyproj_path = str(root / "pyproject.toml")
     pyproj = parse_toml(pyproj_path) if os.path.exists(pyproj_path) else {}
 

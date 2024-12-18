@@ -87,18 +87,13 @@ def test_hook_default() -> None:
     assert hook.test_folders() == {"tests": "tests"}
 
     pyext_dir = python_dir.parent
+    # NB: this will find pyproject.toml and honor maturin source dir config
     hook = hook_default(pyext_dir)
 
-    assert hook.global_namespaces() == {"prunepytest"} | expected_test_data_pkg
+    assert hook.global_namespaces() == {"prunepytest"}
     assert hook.local_namespaces() == {"tests"}
     assert hook.source_roots() == {
         os.path.join("python", "src", "prunepytest"): "prunepytest",
         os.path.join("python", "tests"): "tests",
-        os.path.join("python", "test-data", "ns", "ns2", "normal"): "ns.ns2.normal",
-        **{
-            os.path.join("python", "test-data", pkg): pkg
-            for pkg in expected_test_data_pkg
-            if pkg != "ns"
-        },
     }
     assert hook.test_folders() == {os.path.join("python", "tests"): "tests"}
