@@ -13,6 +13,7 @@ class Git(VCS):
             subprocess.check_output(
                 ["git", "rev-parse", "--show-toplevel"],
                 stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
             )
             .decode("utf-8")
             .rstrip()
@@ -24,6 +25,7 @@ class Git(VCS):
                 subprocess.check_output(
                     ["git", "status", "--porcelain=v1"],
                     stdin=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
                 )
                 .decode("utf-8")
                 .rstrip()
@@ -36,6 +38,7 @@ class Git(VCS):
             subprocess.check_output(
                 ["git", "rev-parse", ref],
                 stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
             )
             .decode("utf-8")
             .rstrip()
@@ -46,6 +49,7 @@ class Git(VCS):
             subprocess.check_output(
                 ["git", "remote"],
                 stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
             )
             .decode("utf-8")
             .rstrip()
@@ -86,6 +90,7 @@ class Git(VCS):
                         commit_id,
                     ],
                     stdin=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
                 )
                 .decode("utf-8")
                 .rstrip()
@@ -102,6 +107,7 @@ class Git(VCS):
                 for status in subprocess.check_output(
                     ["git", "status", "--porcelain=v1"],
                     stdin=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
                 )
                 .decode("utf-8")
                 .splitlines()
@@ -126,6 +132,7 @@ class Git(VCS):
                         f"{base_commit}..{commit_id}" if base_commit else commit_id,
                     ],
                     stdin=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
                 )
                 .decode("utf-8")
                 .splitlines()
