@@ -80,7 +80,7 @@ works by:
    of the set obtained by importing the code
 
 ```bash
-python -m prunepytest.validator
+python -m prunepytest validate
 ```
 
 ### test-time validation
@@ -203,7 +203,7 @@ in a serialized form to reuse across multiple commands.
 ```bash
 # collect and save import graph
 # NB: this is a no-op if a valid graph exists
-python -m prunepytest.util graph --prune-graph graph.bin
+python -m prunepytest graph --prune-graph graph.bin
 
 # use the existing graph instead of parsing source code again
 pytest --prune --prune-graph graph.bin

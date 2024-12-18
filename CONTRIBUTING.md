@@ -53,6 +53,8 @@ From the root directory:
 cargo bench -p common
 ```
 
+We use [divan](https://github.com/nvzqz/divan)
+
 ## Building a Python wheel
 
 From the `pyext` directory
