@@ -145,7 +145,6 @@ dependencies = [
  "ignore",
  "log",
  "rand",
- "rayon",
  "regex",
  "ruff_python_ast",
  "ruff_python_parser",
@@ -637,26 +636,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rayon"
-version = "1.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
-dependencies = [
- "either",
- "rayon-core",
-]
-
-[[package]]
-name = "rayon-core"
-version = "1.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
-dependencies = [
- "crossbeam-deque",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -703,7 +682,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "ruff_python_ast"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.3#53f2d72e022ad5ae7cfcf511318788fed959fe0b"
 dependencies = [
  "aho-corasick",
  "bitflags",
@@ -720,7 +699,7 @@ dependencies = [
 [[package]]
 name = "ruff_python_parser"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.3#53f2d72e022ad5ae7cfcf511318788fed959fe0b"
 dependencies = [
  "bitflags",
  "bstr",
@@ -739,7 +718,7 @@ dependencies = [
 [[package]]
 name = "ruff_python_trivia"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.3#53f2d72e022ad5ae7cfcf511318788fed959fe0b"
 dependencies = [
  "itertools",
  "ruff_source_file",
@@ -750,7 +729,7 @@ dependencies = [
 [[package]]
 name = "ruff_source_file"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.3#53f2d72e022ad5ae7cfcf511318788fed959fe0b"
 dependencies = [
  "memchr",
  "ruff_text_size",
@@ -759,7 +738,7 @@ dependencies = [
 [[package]]
 name = "ruff_text_size"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.1#b3b2c982cdfb487bec7c38ca4e04cebbe0f1964e"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.8.3#53f2d72e022ad5ae7cfcf511318788fed959fe0b"
 
 [[package]]
 name = "rustc-hash"
