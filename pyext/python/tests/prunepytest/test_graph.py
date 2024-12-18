@@ -47,6 +47,7 @@ def test_file_depends_on(g):
     assert g.file_depends_on(p("src/prunepytest/plugin.py")) == {
         "prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -58,12 +59,14 @@ def test_file_depends_on(g):
     assert g.file_depends_on(p("src/prunepytest/util.py")) == {
         "prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
     }
     assert g.file_depends_on(p("src/prunepytest/validator.py")) == {
         "prunepytest",
         "prunepytest.api",
         "prunepytest.args",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -76,11 +79,10 @@ def test_file_depends_on(g):
         "tests.prunepytest",
         "tests.prunepytest.tracker_helper",
     }
-    assert g.file_depends_on(p("tests/prunepytest/test_util.py")) == {
+    assert g.file_depends_on(p("tests/prunepytest/test_defaults.py")) == {
         "prunepytest",
         "prunepytest.api",
-        "prunepytest.graph",
-        "prunepytest.util",
+        "prunepytest.defaults",
         "tests",
         "tests.prunepytest",
         "tests.prunepytest.conftest",
@@ -97,6 +99,7 @@ def test_file_depends_on_everything(g_everything):
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -115,6 +118,7 @@ def test_file_depends_on_everything(g_everything):
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "importlib",
         "__import__",
@@ -124,6 +128,7 @@ def test_file_depends_on_everything(g_everything):
         "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.args",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -142,16 +147,14 @@ def test_file_depends_on_everything(g_everything):
         "builtins.__import__",
         "pytest",
     }
-    assert g.file_depends_on(p("tests/prunepytest/test_util.py")) == {
+    assert g.file_depends_on(p("tests/prunepytest/test_defaults.py")) == {
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
-        "prunepytest.graph",
-        "prunepytest.util",
+        "prunepytest.defaults",
         "tests",
         "tests.prunepytest",
         "tests.prunepytest.conftest",
-        "importlib",
         "__import__",
         "pytest",
     }
@@ -163,6 +166,7 @@ def test_module_depends_on(g):
     assert g.module_depends_on("prunepytest.plugin") == {
         "prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -174,12 +178,14 @@ def test_module_depends_on(g):
     assert g.module_depends_on("prunepytest.util") == {
         "prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
     }
     assert g.module_depends_on("prunepytest.validator") == {
         "prunepytest",
         "prunepytest.api",
         "prunepytest.args",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -192,11 +198,10 @@ def test_module_depends_on(g):
         "tests.prunepytest",
         "tests.prunepytest.tracker_helper",
     }
-    assert g.module_depends_on("tests.prunepytest.test_util", "tests") == {
+    assert g.module_depends_on("tests.prunepytest.test_defaults", "tests") == {
         "prunepytest",
         "prunepytest.api",
-        "prunepytest.graph",
-        "prunepytest.util",
+        "prunepytest.defaults",
         "tests",
         "tests.prunepytest",
         "tests.prunepytest.conftest",
@@ -204,6 +209,7 @@ def test_module_depends_on(g):
     assert g.module_depends_on("tests.prunepytest.test_plugin_validate", "tests") == {
         "prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.plugin",
         "prunepytest.util",
@@ -226,6 +232,7 @@ def test_module_depends_on_everything(g_everything):
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -244,6 +251,7 @@ def test_module_depends_on_everything(g_everything):
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "importlib",
         "__import__",
@@ -253,6 +261,7 @@ def test_module_depends_on_everything(g_everything):
         "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.args",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.tracker",
         "prunepytest.util",
@@ -271,16 +280,14 @@ def test_module_depends_on_everything(g_everything):
         "builtins.__import__",
         "pytest",
     }
-    assert g.module_depends_on("tests.prunepytest.test_util", "tests") == {
+    assert g.module_depends_on("tests.prunepytest.test_defaults", "tests") == {
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
-        "prunepytest.graph",
-        "prunepytest.util",
+        "prunepytest.defaults",
         "tests",
         "tests.prunepytest",
         "tests.prunepytest.conftest",
-        "importlib",
         "__import__",
         "pytest",
     }
@@ -288,6 +295,7 @@ def test_module_depends_on_everything(g_everything):
         "prunepytest",
         "prunepytest._prunepytest",
         "prunepytest.api",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.plugin",
         "prunepytest.util",
@@ -316,6 +324,7 @@ def test_affected_by_files_everything(g_everything):
         p("src/prunepytest/__main__.py"),
         p("src/prunepytest/api.py"),
         p("src/prunepytest/args.py"),
+        p("src/prunepytest/defaults.py"),
         p("src/prunepytest/plugin.py"),
         p("src/prunepytest/graph.py"),
         p("src/prunepytest/tracker.py"),
@@ -329,7 +338,7 @@ def test_affected_by_files_everything(g_everything):
         p("tests/prunepytest/test_plugin_select.py"),
         p("tests/prunepytest/test_plugin_validate.py"),
         p("tests/prunepytest/test_tracker.py"),
-        p("tests/prunepytest/test_util.py"),
+        p("tests/prunepytest/test_defaults.py"),
         p("tests/prunepytest/test_validator.py"),
     }
 
@@ -345,6 +354,7 @@ def test_affected_by_module_everything(g_everything):
     g = g_everything
     assert g.affected_by_modules(["prunepytest._prunepytest"]) == {
         "prunepytest.__main__",
+        "prunepytest.defaults",
         "prunepytest.graph",
         "prunepytest.plugin",
         "prunepytest.util",
@@ -352,7 +362,7 @@ def test_affected_by_module_everything(g_everything):
         "tests.prunepytest.test_graph",
         "tests.prunepytest.test_plugin_select",
         "tests.prunepytest.test_plugin_validate",
-        "tests.prunepytest.test_util",
+        "tests.prunepytest.test_defaults",
         "tests.prunepytest.test_validator",
     }
 

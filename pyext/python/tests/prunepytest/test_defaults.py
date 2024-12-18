@@ -2,7 +2,7 @@
 
 import os.path
 
-from prunepytest.util import infer_ns_pkg, find_package_roots, hook_default
+from prunepytest.defaults import infer_ns_pkg, find_package_roots, hook_default
 
 from .conftest import TEST_DATA
 

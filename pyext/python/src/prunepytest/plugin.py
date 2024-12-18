@@ -24,7 +24,8 @@ from _pytest.tmpdir import TempPathFactory
 
 from .graph import ModuleGraph
 from .api import PluginHook, DefaultHook
-from .util import chdir, load_import_graph, load_hook, hook_default
+from .defaults import hook_default
+from .util import chdir, load_import_graph, load_hook
 from .tracker import Tracker, relevant_frame_index, warning_skip_level
 from .vcs.detect import detect_vcs
 
