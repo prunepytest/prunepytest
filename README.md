@@ -1,5 +1,5 @@
-prune-py-test
-=============
+prunepytest
+===========
 
 Do you have lots of Python tests?
 
@@ -233,6 +233,25 @@ cases would be welcome.
 
 ## FAQ
 
+  - **What environments are supported?**  
+  The minimum required Python version is 3.7  
+  The minimum required pytest version is 7.2  
+  Linux, macOS, and Windows are supported, and covered in CI.
+
+
+- **Is this compatible with [xdist](https://pytest-xdist.readthedocs.io/)?**  
+  Yes!  
+  The pytest plugin will automatically detect whether xdist is being used, and make
+  necessary adjustments to avoid redundant import graph computation, and ensure
+  continued correctness of test-time validation.  
+  NB: this has only been tested with `pytest-xdist==3.6.1`
+
+
+- **What about `<other pytest plugin>`?**  
+  While there is no a-priori expectation of incompatibility, it is not practical to
+  test interactions with all popular pytest plugins. Feel free to report any issue.
+
+
   - **How does this compare to [`pytest-testmon`](https://testmon.org/)?**  
     * tesmon's coverage-based test selection has the potential to more aggressively
       prune the test set.
@@ -249,19 +268,6 @@ cases would be welcome.
       for large distributed test runs.
     * testmon does not offer meaningful validation of its test selection logic, whereas
       prunepytest takes validation seriously, and has a comprehensive test suite.
-
-
-  - **Is this compatible with [xdist](https://pytest-xdist.readthedocs.io/)?**  
-  Yes!  
-  The pytest plugin will automatically detect whether xdist is being used, and make
-  necessary adjustments to avoid redundant import graph computation, and ensure
-  continued correctness of test-time validation.  
-  NB: this has only been tested with `pytest-xdist==3.6.1`
-
-
-  - **What about `<other pytest plugin>`?**  
-  While there is no a-priori expectation of incompatibility, it is not practical to
-  test interactions with all popular pytest plugins. Feel free to report any issue.
 
 
   - **What's this weird [license](LICENSE) about?**  
