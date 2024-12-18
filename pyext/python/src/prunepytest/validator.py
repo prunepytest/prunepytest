@@ -46,8 +46,9 @@ import os
 import sys
 import traceback
 
-from typing import Callable, Dict, Set, Optional, Tuple
+from typing import Callable, Dict, List, Set, Optional, Tuple
 
+from .args import Arg, parse_args
 from .graph import ModuleGraph
 from .api import ValidatorHook
 from .tracker import Tracker, print_clean_traceback
@@ -55,7 +56,6 @@ from .util import (
     print_with_timestamp,
     load_import_graph,
     load_hook_or_default,
-    parse_args,
 )
 
 
@@ -277,15 +277,15 @@ def validate(
     return error_count, files_with_missing_imports
 
 
-if __name__ == "__main__":
-    hook_path, graph_path = parse_args(sys.argv[1:])
+def main(args: List[str]) -> None:
+    p = parse_args(args, supported_args={Arg.hook_path, Arg.graph_path})
 
     # TODO: support override from hook
     from ._prunepytest import configure_logger
 
     configure_logger("/dev/stdout", "info")
 
-    n_err, m_missing = validate(hook_path=hook_path, graph_path=graph_path)
+    n_err, m_missing = validate(hook_path=p.hook_path, graph_path=p.graph_path)
 
     print_with_timestamp("--- validation result")
     if n_err + m_missing == 0:
@@ -299,3 +299,7 @@ if __name__ == "__main__":
             print("Errors prevented validation of the rust module graph")
             print("Fix them and try again...")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
