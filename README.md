@@ -239,7 +239,7 @@ cases would be welcome.
   Linux, macOS, and Windows are supported, and covered in CI.
 
 
-- **Is this compatible with [xdist](https://pytest-xdist.readthedocs.io/)?**  
+  - **Is this compatible with [xdist](https://pytest-xdist.readthedocs.io/)?**  
   Yes!  
   The pytest plugin will automatically detect whether xdist is being used, and make
   necessary adjustments to avoid redundant import graph computation, and ensure
@@ -247,27 +247,29 @@ cases would be welcome.
   NB: this has only been tested with `pytest-xdist==3.6.1`
 
 
-- **What about `<other pytest plugin>`?**  
+  - **What about `<other pytest plugin>`?**  
   While there is no a-priori expectation of incompatibility, it is not practical to
   test interactions with all popular pytest plugins. Feel free to report any issue.
 
 
   - **How does this compare to [`pytest-testmon`](https://testmon.org/)?**  
-    * tesmon's coverage-based test selection has the potential to more aggressively
-      prune the test set.
+  testmon is the only other attempt I am aware of to solve the problem of selecting
+  a minimal safe set of tests to run based on modified files. It's design is based on
+  detailed code coverage data, which has the potential to more aggressively prune the
+  test set. However, it has a number of significant drawbacks:
     * testmon requires enabling code coverage with [`coverage.py`](https://coverage.readthedocs.io/),
       which typically incurs 2-4x slowdown. With prunepytest, you are free to leverage
       the amazing [slipcover](https://github.com/plasma-umass/slipcover) instead.
-    * testmon requires a full initial testrun to build the dependency database. For
+    * testmon requires a full initial test run to build the dependency database. For
       prunepytest, this is only relevant as a validation step for codebases that rely
       on dynamic imports.  
     * testmon still needs to parse the Python source code, which can add considerable
       overhead at test-selection time for large codebases.
     * In most cases, testmon's database is considerably larger than prunepytest's
-      serialized import graph, making it more practical to transfer across machines
-      for large distributed test runs.
+      serialized import graph, which makes a big difference for distributed test runs.
     * testmon does not offer meaningful validation of its test selection logic, whereas
-      prunepytest takes validation seriously, and has a comprehensive test suite.
+      prunepytest takes validation seriously, and has a comprehensive test suite that
+      achieves a high level of code coverage.
 
 
   - **What's this weird [license](LICENSE) about?**  

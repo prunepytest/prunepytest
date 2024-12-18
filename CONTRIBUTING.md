@@ -15,11 +15,16 @@ We recommend using [rustup](https://rustup.rs/) to manage Rust toolchains.
 Requiring manual installation:
  - [cargo-nextest](https://nexte.st/)
  - [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov)
+ - [pre-commit](https://pre-commit.com/)
 
-Automatically installed by [`runtests.sh`](runtests.sh)
+Automatically installed by [`runtests.sh`](runtests.sh) or `pre-commit`
  - [pytest](https://pytest.org)
  - [mypy](https://github.com/python/mypy)
  - [slipcover](https://github.com/plasma-umass/slipcover)
+
+Automatically installed by `pre-commit`
+ - [ruff](https://astral.sh/ruff)
+ - [rustfmt](https://rust-lang.github.io/)
 
 ## High-level test runner
 
