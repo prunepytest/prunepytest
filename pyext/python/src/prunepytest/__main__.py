@@ -13,6 +13,19 @@ from .args import parse_args, Arg, ArgValues
 from .util import load_hook_or_default, load_import_graph
 
 
+USAGE = """
+usage: python -m prunepytest <cmd> [options...]
+
+Available commands:
+  hook [<path>]
+  graph [--hook <path>] [--graph <path>]
+  modified [--base-commit <commit_id>]
+  affected [--hook <path>] [--graph <path>] [--base-commit <commit_id>]
+  validate [--hook <path>] [--graph <path>]
+  help
+"""
+
+
 def _modified(p: ArgValues) -> Set[str]:
     from .vcs.detect import detect_vcs
 
@@ -24,6 +37,10 @@ def _modified(p: ArgValues) -> Set[str]:
 
 
 def main() -> None:
+    if len(sys.argv) < 2:
+        print(USAGE)
+        sys.exit(0)
+
     cmd = sys.argv[1]
     if cmd == "hook":
         # TODO: argparse help handling
@@ -34,6 +51,15 @@ def main() -> None:
         p = parse_args(sys.argv[2:], supported_args={Arg.hook_path, Arg.graph_path})
         hook = load_hook_or_default(p.hook_path)
         graph = load_import_graph(hook, p.graph_path)
+        dyn = {
+            f
+            for f in graph.affected_by_modules(["importlib", "__import__"])
+            if hook.is_test_file(f.rpartition(".")[2] + ".py")
+        }
+        if dyn:
+            print(
+                f"{len(dyn)} test files potentially affected by dynamic imports!\n{dyn}"
+            )
         if p.graph_path:
             graph.to_file(p.graph_path)
     elif cmd == "modified":
@@ -58,9 +84,12 @@ def main() -> None:
         from . import validator
 
         validator.main(sys.argv[2:])
+    elif cmd in {"help", "-help", "-h", "--help"}:
+        print(USAGE)
     else:
-        # TODO: list available commands
         print(f"unknown command: {cmd}", file=sys.stderr)
+        print()
+        print(USAGE)
         sys.exit(1)
 
 
