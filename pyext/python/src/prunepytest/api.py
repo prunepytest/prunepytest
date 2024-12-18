@@ -1,5 +1,10 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
+"""
+This module is a public API: it is expected that compatibility will be
+preserved across minor and patch releases.
+"""
+
 import os
 from abc import ABC, abstractmethod, ABCMeta
 from fnmatch import fnmatch

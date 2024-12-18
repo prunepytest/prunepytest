@@ -1,5 +1,10 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
+"""
+This module is an implementation detail: there is no guarantee of forward
+or backwards compatibility, even across patch releases.
+"""
+
 import importlib.util
 import os
 import pathlib

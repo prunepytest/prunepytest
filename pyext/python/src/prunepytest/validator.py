@@ -1,41 +1,8 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
 """
-Usage: python -m prunepytest.validator <path/to/hook.py> [<path/to/serialized/graph>]
-
-Purpose:
-
-This file is part of a multi-prong system to validate the soundness of prunepytest
-for a given codebase.
-
-Specifically, it is concerned with validating that the transitive closure
-of dependencies for a set of test files is computed properly, to give
-confidence in the computation of its transpose: the set of affected tests to
-run given a set of modified files.
-
-Python import tracking is a *very hard* problem, because arbitrary Python
-code can be executed at import time, and arbitrary imports can be loaded
-at run time! We deal with that as follows:
-
- - the rust parser goes deep, extracting import statements even in code that
-   might never be executed (it does however ignore typechecking-only
-   imports). These are not going to be reported by the Python validator
-   and that's OK. Better to have false positives (detected imports that
-   are not used) than false negatives (undetected imports).
-
- - this validator actually runs arbitrary python code during import
-   tracking, because that's how Python rolls, so it is able to find
-   dynamically-loaded imports, provided they are resolved at import-time
-   (i.e. triggered by a module-level statement). This is good as it shows
-   blind spots in the rust parser and gives us an opportunity to make those
-   dynamic dependencies explicit. This is useful as a first pass before
-   attempting to actually run tests under prunepytest as it gives quicker,
-   though less accurate, feedback on the use of dynamic dependencies.
-
- - the pytest plugin tracks imports while tests are actually running, and
-   is able to enforce that no unexpected imports are used.
-
-
+This module is an implementation detail: there is no guarantee of forward
+or backwards compatibility, even across patch releases.
 """
 
 import contextlib
@@ -60,6 +27,7 @@ from .util import (
 
 
 def import_with_capture(fq: str, c_out: bool, c_err: bool) -> None:
+    """import a single module, with optional capture of stdout and/or stderr"""
     with io.StringIO() as f:
         with contextlib.redirect_stdout(
             f
@@ -78,6 +46,12 @@ def import_with_capture(fq: str, c_out: bool, c_err: bool) -> None:
 def recursive_import_tests(
     path: str, import_prefix: str, hook: ValidatorHook, errors: Dict[str, BaseException]
 ) -> Set[str]:
+    """
+    Recursively walk down a file tree, importing every file that looks like a test file.
+
+    NB: all __init__.py are imported, even in packages that do not actually contain any
+    test code.
+    """
     imported = set()
 
     # process __init__.py first if present
@@ -121,6 +95,12 @@ def validate_subset(
     filter_fn: Callable[[str], bool],
     package: Optional[str] = None,
 ) -> int:
+    """
+    Validate that a subset of tracked matching the given `filter_fn` are safely
+    covered by the import graph (i.e. that the set of dependencies tracked by the statically
+    derived import graph is a superset of the set of dependencies caught by the dynamic
+    import Tracker while importing the actual Python modules)
+    """
     diff_count = 0
     for module, pydeps in py_tracked.items():
         if not filter_fn(module):
@@ -174,14 +154,13 @@ def validate_folder(
         for m in imported:
             with_dynamic[m] = t.with_dynamic(m)
 
-        # NB: do validation at the package level for the test namespace
+        # NB: do validation at the package level for the local namespace
         # this is necessary because it is not a unified namespace. There can be
         # conflicts between similarly named test modules across packages.
         #
         # NB: we only validate test files, not test helpers. This is because, for
-        # performance reason, dynamic dependencies are only applied to nodes of the
-        # import graphs that do not have any ancestors (i.e modules not imported by
-        # any other module)
+        # performance reason, some dynamic dependencies are only applied to leaves
+        # of the import graph (i.e modules not imported by any other module)
         # This is fine because the purpose of this validation is to ensure that we
         # can determine a set of affected *test files* from a given set of modified
         # files, so as long as we validate that tests have matching imports between
@@ -243,11 +222,6 @@ def validate(
     # TODO: user-defined order (toposort of package dep graph...)
     print_with_timestamp("--- tracking python imports")
     for fs, py in sorted(hook.test_folders().items()):
-        # FIXME: need to support test files being inside global namespace...
-        # both: interspersed all over normal code, and in subfolder nested in normal code
-
-        # assert sub in hook.local_namespaces(), f"{sub} not in {hook.local_namespaces()}"
-
         n_errors, n_mismatching_files = validate_folder(fs, py, hook, t, g)
 
         files_with_missing_imports += n_mismatching_files
@@ -278,6 +252,9 @@ def validate(
 
 
 def main(args: List[str]) -> None:
+    """
+    main entry point for the import-time validator
+    """
     p = parse_args(args, supported_args={Arg.hook_path, Arg.graph_path})
 
     # TODO: support override from hook

@@ -1,11 +1,17 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
 """
-pytest plugin for prune-py-test
+pytest plugin for prunepytest
 
 includes two parts:
  - a test case selector, based on import graph and modified files
  - a validator to flag unexpected imports, providing confidence that test (de)selection is sound
+
+The flags added by this module to pytest are part of the public API, and expected
+to remain stable across minor and patch releases.
+
+The rest of this module is an implementation detail: there is no guarantee of forward
+or backwards compatibility, even across patch releases.
 """
 
 import os
