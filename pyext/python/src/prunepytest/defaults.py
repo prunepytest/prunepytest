@@ -132,7 +132,11 @@ def filter_packages(
     f = toml_xtract(pyproject, "tool.maturin.python-source")
     if f:
         print(f"filter pkg roots according to maturing python-source: {f}")
-        filtered = {p for p in filtered if str(p).startswith(f) or p.name == "tests"}
+        filtered = {
+            p
+            for p in filtered
+            if str(p).startswith(os.sep.join(f.split("/"))) or p.name == "tests"
+        }
 
     f = toml_xtract(pyproject, "tool.maturin.python-packages")
     if f:

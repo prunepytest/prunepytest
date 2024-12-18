@@ -441,7 +441,10 @@ def test_dynamic_dependencies_at_leaves_varying_local(g):
 
     g.add_dynamic_dependencies_at_leaves(
         [
-            ("tests/prunepytest/tracker_helper.py", {"tests": {"prunepytest.vcs.git"}}),
+            (
+                p("tests/prunepytest/tracker_helper.py"),
+                {"tests": {"prunepytest.vcs.git"}},
+            ),
         ],
     )
 
