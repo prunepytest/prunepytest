@@ -24,7 +24,7 @@ If you wish to use this on code that more than one individual can access, but th
 not publicly available under an OSI or FSF approved license, you may take advantage of
 the trial period for up to 15 days per calendar year. After that, you MUST either obtain
 my written permission to continue using the software, or wait for usage restrictions to
-be lifted, 4 years after the initial public release.
+be lifted, 4 years after the initial public release, just in time for Christmas 2028.
 
 [Contact me](mailto:hugues@betakappaphi.com)
 
@@ -236,7 +236,9 @@ cases would be welcome.
   - **What environments are supported?**  
   The minimum required Python version is 3.7  
   The minimum required pytest version is 7.2  
-  Linux, macOS, and Windows are supported, and covered in CI.
+  Linux (x86_64, arm64), macOS (x86_64, arm64), and Windows (x86, x86_64) are supported,
+  covered in CI, and available as pre-built binary wheels on PyPI. More environments may
+  be added in the future based on demand.  
 
 
   - **Is this compatible with [xdist](https://pytest-xdist.readthedocs.io/)?**  
@@ -254,7 +256,7 @@ cases would be welcome.
 
   - **How does this compare to [`pytest-testmon`](https://testmon.org/)?**  
   testmon is the only other attempt I am aware of to solve the problem of selecting
-  a minimal safe set of tests to run based on modified files. It's design is based on
+  a minimal safe set of tests to run based on modified files. Its design is based on
   detailed code coverage data, which has the potential to more aggressively prune the
   test set. However, it has a number of significant drawbacks:
     * testmon requires enabling code coverage with [`coverage.py`](https://coverage.readthedocs.io/),
@@ -273,11 +275,11 @@ cases would be welcome.
 
 
   - **What's this weird [license](LICENSE) about?**  
-  Large companies using this software in their CI  system might unlock *significant* cost
-  savings.  
-  In fact, I started prototyping this code to pitch a certain financial software company on
-  hiring me as a contractor to save upward of $100k/month on EC2 costs alone! They turned me
-  down, and I want to make sure they were serious when they told me they were not interested :)  
+  I started prototyping this code to support a contracting pitch to a software company in
+  the financial sector. They would have probably saved upwards of $100k/month on EC2 costs
+  alone!  
+  They declined my proposal, and out of respect for their wishes to keep wasting money, I
+  want to make sure the solution is *not* available to them for free ;)  
   At the same time, I believe this tool could be tremendously useful for many open source
   projects. This weird license is my attempt to strike a balance between serving the needs
   of the open source ecosystem while incentivizing large companies to pay for software that
