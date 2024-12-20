@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -68,39 +71,47 @@ jobs:
           export INSTALL_ARGS="--find-links dist --no-index prunepytest"
           ./runtests.sh
 
-  linux-coverage:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        python-version: ["3.9"]
-        platform:
-          - runner: ubuntu-latest
+  coverage:
+    runs-on: ubuntu-latest
+    # TODO: skip this one for commits that don't touch py or rust code?
+    # maybe make it opt-in?
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          path: '_validation'
+          repository: prunepytest/prunepytest-validation
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.9
       - uses: dtolnay/rust-toolchain@1.83
+        with:
+          components: llvm-tools-preview
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov, cargo-nextest
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --out dist
-          working-directory: pyext
-          manylinux: auto
-          # make sure the wheel is build with coverage enabled
-          before-script-linux: |
-            source <(cargo llvm-cov show-env --export-prefix)
-      # TODO: rename/tag/munge wheel appropriately and upload somewhere
-      # for coverage-enabled runs of prunetestpy-validation suite
-      - name: pytest
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      - name: Run all tests
         run: |
-          export INSTALL_ARGS="--find-links dist --no-index prunepytest"
-          RUST_COVERAGE=1 ./runtests.sh
-      # TODO upload coverage results
+          set -ex
+          export MATURIN_FLAGS="--compatibility=linux --auditwheel=skip"
+          EXTRA_TESTS=_validation/runtests.sh RUST_COVERAGE=1 ./runtests.sh
+          mkdir artifacts
+          mv target/llvm-cov/html cov.merged.json lcov.info artifacts/
+      - name: Upload coverage results to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          disable_search: 'true'
+          verbose: 'true'
+          files: artifacts/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: prunepytest/prunepytest
+      - name: Upload coverage results as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: artifacts
 
   linux-native:
     runs-on: ${{ matrix.platform.runner }}
@@ -174,9 +185,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.platform.target }}
       - uses: dtolnay/rust-toolchain@1.83
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
