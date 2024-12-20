@@ -44,6 +44,9 @@ if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
   cargo llvm-cov show-env --export-prefix > .cov.env
   source .cov.env
   cargo llvm-cov clean --workspace
+  if [[ -n "${MATURIN_FLAGS:-}" ]] ; then
+    maturin_mode=(${MATURIN_FLAGS})
+  fi
 else
   maturin_mode=(--release)
 fi
@@ -110,4 +113,5 @@ if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
   echo
   echo "--- rust coverage"
   cargo llvm-cov report --html
+  cargo llvm-cov report --json --output-path lcov.info
 fi
