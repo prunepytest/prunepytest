@@ -74,11 +74,9 @@ jobs:
     # maybe make it opt-in?
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: 'prunepytest'
       - uses: actions/checkout@v4
         with:
-          path: 'prunepytest-validation'
+          path: '_validation'
           repository: prunepytest/prunepytest-validation
       - uses: actions/setup-python@v5
         with:
@@ -92,25 +90,24 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
       - name: Run all tests
-        working-directory: prunepytest
         run: |
           set -ex
           export MATURIN_FLAGS="--compatibility=linux --auditwheel=skip"
-          EXTRA_TESTS=../prunepytest-validation/runtests.sh RUST_COVERAGE=1 ./runtests.sh
+          EXTRA_TESTS=_validation/runtests.sh RUST_COVERAGE=1 ./runtests.sh
           mkdir artifacts
           mv target/llvm-cov/html cov.merged.json lcov.info artifacts/
       - name: Upload coverage results to Codecov
         uses: codecov/codecov-action@v5
         with:
-          working-directory: prunepytest
-          directory: artifacts
-          files: lcov.info
+          disable_search: 'true'
+          verbose: 'true'
+          files: artifacts/lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload coverage results as artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: prunepytest/artifacts
+          path: artifacts
 
   linux-native:
     runs-on: ${{ matrix.platform.runner }}
