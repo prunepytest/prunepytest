@@ -112,6 +112,7 @@ fi
 if [[ "${RUST_COVERAGE:-}" == "1" ]] ; then
   echo
   echo "--- rust coverage"
-  cargo llvm-cov report --lcov --output-path lcov.info
-  cargo llvm-cov report --html
+  covargs=(--ignore-filename-regex cmd/)
+  cargo llvm-cov report "${covargs[@]}" --lcov --output-path lcov.info
+  cargo llvm-cov report "${covargs[@]}" --html
 fi
