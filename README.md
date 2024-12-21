@@ -1,6 +1,10 @@
 prunepytest
 ===========
 
+[![CI](https://github.com/prunepytest/prunepytest/actions/workflows/CI.yml/badge.svg)](https://github.com/prunepytest/prunepytest/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/prunepytest/prunepytest/graph/badge.svg?token=2I5G1BGT7R)](https://codecov.io/gh/prunepytest/prunepytest)
+[![pypi](https://img.shields.io/pypi/v/prunepytest?color=blue)](https://pypi.org/project/prunepytest/)
+
 Do you have lots of Python tests?
 
 Do you find yourself wondering whether you really need to run the full test suite
