@@ -20,6 +20,7 @@ Available commands:
   hook [<path>]
   graph [--hook <path>] [--graph <path>]
   modified [--base-commit <commit_id>]
+  depends [--hook <path>] [--graph <path>] modules/files...
   affected [--hook <path>] [--graph <path>] [--base-commit <commit_id>]
   validate [--hook <path>] [--graph <path>]
   help
@@ -65,6 +66,18 @@ def main() -> None:
     elif cmd == "modified":
         p = parse_args(sys.argv[2:], supported_args={Arg.base_commit})
         print(_modified(p))
+    elif cmd == "depends":
+        p = parse_args(
+            sys.argv[2:],
+            supported_args={Arg.hook_path, Arg.graph_path},
+            allow_unknown=True,
+        )
+        hook = load_hook_or_default(p.hook_path)
+        graph = load_import_graph(hook, p.graph_path)
+        for m in p._rest:
+            print(
+                f"{m} : {graph.file_depends_on(m) if '/' in m else graph.module_depends_on(m)}"
+            )
     elif cmd == "affected":
         p = parse_args(
             sys.argv[2:],
