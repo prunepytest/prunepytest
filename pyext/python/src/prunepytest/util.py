@@ -67,7 +67,9 @@ def chdir(d: str) -> Generator[None, None, None]:
         os.chdir(prev)
 
 
-def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph:
+def load_import_graph(
+    hook: BaseHook, file: Optional[str] = None, rel_root: Optional[pathlib.Path] = None
+) -> ModuleGraph:
     """
     Helper function to load a module import graph, either from a serialized
     file if available, or by parsing the relevant Python source code, based
@@ -77,11 +79,16 @@ def load_import_graph(hook: BaseHook, file: Optional[str] = None) -> ModuleGraph
     # load graph from file if provided, otherwise parse the repo
     if file and os.path.exists(file):
         print_with_timestamp("--- loading existing import graph")
-        g = ModuleGraph.from_file(file)
+        g = ModuleGraph.from_file(str(rel_root / file) if rel_root else file)
     else:
         print_with_timestamp("--- building fresh import graph")
+        roots = (
+            {str(rel_root / sr): i for sr, i in hook.source_roots().items()}
+            if rel_root
+            else hook.source_roots()
+        )
         g = ModuleGraph(
-            hook.source_roots(),
+            roots,
             hook.global_namespaces(),  # unified namespace
             hook.local_namespaces(),  # per-pkg namespace
             external_prefixes=hook.external_imports() | {"importlib", "__import__"},

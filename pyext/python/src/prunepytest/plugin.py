@@ -278,8 +278,10 @@ class GraphLoader:
                 else None
             )
 
+            rel_root = self.config.rootpath.relative_to(self.graph_root)
+
             with chdir(self.graph_root):
-                graph = load_import_graph(self.hook, load_path)
+                graph = load_import_graph(self.hook, load_path, rel_root=rel_root)
 
             if is_xdist_controller(session) and not load_path:
                 print(f"saving import graph to {self.graph_path}")
