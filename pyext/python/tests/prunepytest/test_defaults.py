@@ -12,6 +12,7 @@ expected_test_data_pkg = {
     "ns",
     "nsbranching",
     "nsempty",
+    "pyi",
     "reexport",
     "repeated",
     "simple",

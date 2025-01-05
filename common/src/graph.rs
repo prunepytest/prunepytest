@@ -110,8 +110,11 @@ impl ModuleGraph {
         // holy shittastic batman!
         // what if you have foo.py next to foo/__init__.py ?
         // Python will preferentially pick the package over the module, and so should we
-        // NB: this is important ot enforce unique mapping of import path to ModuleRef
-        if self.exists_case_sensitive(&filepath[..filepath.len() - 3], "__init__.py") {
+        // NB: this is important to enforce unique mapping of import path to ModuleRef
+        let parent = &filepath[..filepath.rfind('.').unwrap()];
+        if self.exists_case_sensitive(parent, "__init__.py")
+            || self.exists_case_sensitive(parent, "__init__.pyi")
+        {
             warn!("ignoring {} in favor of conflicting package", filepath);
             return;
         }
@@ -214,7 +217,7 @@ impl ModuleGraph {
     }
 
     fn exists_case_sensitive(&self, dir: &str, name: &str) -> bool {
-        // Oh joy! on case-sensitive filesystems we want to make sure we resolve
+        // Oh joy! on case-insensitive filesystems we want to make sure we resolve
         // module paths in a way that is consistent with what Python itself does
         // as formalized in PEP 235 https://peps.python.org/pep-0235/
         // Is this really necessary? well, yes, because some people are fond of
@@ -279,29 +282,38 @@ impl ModuleGraph {
 
         let mut depbase = fs_candidate.to_string();
         for _ in 0..2 {
-            let candidate_init = ustr(&(depbase.clone() + MAIN_SEPARATOR_STR + "__init__.py"));
-            let candidate_module = ustr(&(depbase.clone() + ".py"));
+            let _init_pyi = &(depbase.clone() + MAIN_SEPARATOR_STR + "__init__.pyi");
+            let _init_py = &_init_pyi[.._init_pyi.len() - 1];
+            let _mod_pyi = &(depbase.clone() + ".pyi");
+            let _mod_py = &_mod_pyi[.._mod_pyi.len() - 1];
 
-            if let Some(r) = self.modules_refs.ref_for_fs(candidate_init) {
+            let candidate_init_pyi = ustr(_init_pyi);
+            let candidate_init_py = ustr(_init_py);
+            let candidate_module_pyi = ustr(_mod_pyi);
+            let candidate_module_py = ustr(_mod_py);
+
+            if let Some(r) = self
+                .modules_refs
+                .ref_for_fs(candidate_init_py)
+                .or_else(|| self.modules_refs.ref_for_fs(candidate_init_pyi))
+                .or_else(|| self.modules_refs.ref_for_fs(candidate_module_py))
+                .or_else(|| self.modules_refs.ref_for_fs(candidate_module_pyi))
+            {
                 let rv = self.modules_refs.get(r);
                 assert_eq!(rv.pkg, local_fs_root);
                 return Some(r);
-            } else if let Some(r) = self.modules_refs.ref_for_fs(candidate_module) {
-                let rv = self.modules_refs.get(r);
-                assert_eq!(rv.pkg, local_fs_root);
-                return Some(r);
-            } else if self.exists_case_sensitive(depbase.as_str(), "__init__.py") {
-                return Some(
-                    self.modules_refs
-                        .get_or_create(candidate_init, dep, local_fs_root),
-                );
-            } else if let Some((dir, name)) = candidate_module.rsplit_once(MAIN_SEPARATOR) {
-                if self.exists_case_sensitive(dir, name) {
-                    return Some(self.modules_refs.get_or_create(
-                        candidate_module,
-                        dep,
-                        local_fs_root,
-                    ));
+            }
+
+            for cand in [
+                candidate_init_py,
+                candidate_init_pyi,
+                candidate_module_py,
+                candidate_module_pyi,
+            ] {
+                if let Some((dir, name)) = cand.rsplit_once(MAIN_SEPARATOR) {
+                    if self.exists_case_sensitive(dir, name) {
+                        return Some(self.modules_refs.get_or_create(cand, dep, local_fs_root));
+                    }
                 }
             }
 
@@ -350,7 +362,9 @@ impl ModuleGraph {
                             let t = e.file_type().unwrap();
                             let name = e.file_name().to_str().unwrap().to_string();
                             if t.is_dir() {
-                                if fs::exists(e.path().join("__init__.py")).unwrap_or(false) {
+                                if fs::exists(e.path().join("__init__.py")).unwrap_or(false)
+                                    || fs::exists(e.path().join("__init__.pyi")).unwrap_or(false)
+                                {
                                     Some(name)
                                 } else {
                                     None
@@ -359,6 +373,11 @@ impl ModuleGraph {
                                 None
                             } else if name.ends_with(".py") && name != "__init__.py" {
                                 Some(name[..name.len() - 3].to_string())
+                            } else if name.ends_with(".pyi") && name != "__init__.pyi" {
+                                // NB: there might be a duplicate if there is a matching *.py
+                                // however that will be fine downstream as we only ever use
+                                // this list to populate a set of ModuleRef...
+                                Some(name[..name.len() - 4].to_string())
                             } else {
                                 None
                             }
@@ -502,7 +521,25 @@ impl ModuleGraph {
         tx: &mpsc::Sender<parser::Error>,
     ) -> WalkState {
         let filename = e.file_name().to_str().unwrap();
-        if !filename.ends_with(".py") {
+        // process .pyi if and only if there isn't a corresponding .py
+        // this is useful to handle native code, or generated code that
+        // is not part of normal source tree, but that might still have
+        // relevant dependency information
+        if filename.ends_with(".pyi")
+            && !self.exists_case_sensitive(
+                e.path().parent().unwrap().to_str().unwrap(),
+                &filename[..filename.len() - 1],
+            )
+        {
+            info!("info: allowing pyi {}", filename);
+            // TODO: record dependency on corresponding *.pyx / *.pxd if present
+            // this would allow more accurately tracking changes to native code
+            // we would either have to allow a single module ref to point to a set of files
+            // instead of a single file, or have an extra ref for the extra files and add
+            // dependency edges appropriately
+            // option 2 seems preferable, and would mesh better with, for instance, explicit
+            // annotation of data dependencies
+        } else if !filename.ends_with(".py") {
             return WalkState::Continue;
         }
         debug!("parse: {}", filename);
@@ -513,9 +550,10 @@ impl ModuleGraph {
         }
         let (pkg, module) = res.unwrap();
 
-        // remove .py suffix, turn / into .
+        // remove .py[i] suffix, turn / into .
         // NB: preserve __init__ for correct relative import resolution
-        let module = module[..module.len() - 3].replace(MAIN_SEPARATOR, ".");
+        let suffix_idx = module.rfind('.').unwrap();
+        let module = module[..suffix_idx].replace(MAIN_SEPARATOR, ".");
 
         match raw_get_all_imports(filepath, &module, true, include_typechecking) {
             Ok((is_ns_pkg_init, imports)) => {

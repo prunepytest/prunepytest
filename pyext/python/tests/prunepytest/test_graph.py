@@ -30,8 +30,6 @@ def g_everything():
             global_prefixes={"prunepytest"},
             local_prefixes={"tests"},
             external_prefixes={
-                # track native code as an external prefix since it has no matching .py
-                "prunepytest._prunepytest",
                 "importlib",
                 "builtins.__import__",
                 "__import__",
@@ -46,6 +44,7 @@ def test_file_depends_on(g):
     assert g.file_depends_on(p("src/prunepytest/api.py")) == {"prunepytest"}
     assert g.file_depends_on(p("src/prunepytest/plugin.py")) == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "prunepytest.graph",
@@ -58,12 +57,14 @@ def test_file_depends_on(g):
     assert g.file_depends_on(p("src/prunepytest/tracker.py")) == {"prunepytest"}
     assert g.file_depends_on(p("src/prunepytest/util.py")) == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "prunepytest.graph",
     }
     assert g.file_depends_on(p("src/prunepytest/validator.py")) == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.args",
         "prunepytest.defaults",
@@ -81,6 +82,7 @@ def test_file_depends_on(g):
     }
     assert g.file_depends_on(p("tests/prunepytest/test_defaults.py")) == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "tests",
@@ -165,6 +167,7 @@ def test_module_depends_on(g):
     assert g.module_depends_on("prunepytest.api") == {"prunepytest"}
     assert g.module_depends_on("prunepytest.plugin") == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "prunepytest.graph",
@@ -177,12 +180,14 @@ def test_module_depends_on(g):
     assert g.module_depends_on("prunepytest.tracker") == {"prunepytest"}
     assert g.module_depends_on("prunepytest.util") == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "prunepytest.graph",
     }
     assert g.module_depends_on("prunepytest.validator") == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.args",
         "prunepytest.defaults",
@@ -200,6 +205,7 @@ def test_module_depends_on(g):
     }
     assert g.module_depends_on("tests.prunepytest.test_defaults", "tests") == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "tests",
@@ -208,6 +214,7 @@ def test_module_depends_on(g):
     }
     assert g.module_depends_on("tests.prunepytest.test_plugin_validate", "tests") == {
         "prunepytest",
+        "prunepytest._prunepytest",
         "prunepytest.api",
         "prunepytest.defaults",
         "prunepytest.graph",
@@ -321,6 +328,7 @@ def test_affected_by_files(g):
 def test_affected_by_files_everything(g_everything):
     g = g_everything
     assert g.affected_by_files([p("src/prunepytest/__init__.py")]) == {
+        p("src/prunepytest/_prunepytest.pyi"),
         p("src/prunepytest/__main__.py"),
         p("src/prunepytest/api.py"),
         p("src/prunepytest/args.py"),
@@ -464,3 +472,56 @@ def test_dynamic_dependencies_at_leaves_varying_local(g):
     assert "tests.prunepytest.test_tracker" in g.affected_by_modules(
         ["prunepytest.vcs.git"]
     )
+
+
+def test_pyi():
+    with chdir(TEST_DATA):
+        g = ModuleGraph(
+            source_roots={p("pyi"): "pyi"},
+            global_prefixes={"pyi"},
+            local_prefixes=set(),
+            include_typechecking=False,
+        )
+
+        assert g.module_depends_on("pyi.foo") == {"pyi", "pyi.bar", "pyi.baz"}
+        assert g.module_depends_on("pyi.bar") == {"pyi", "pyi.baz"}
+        assert g.module_depends_on("pyi.baz") == {"pyi"}
+        assert g.module_depends_on("pyi.qux") == {
+            "pyi",
+            "pyi.foo",
+            "pyi.bar",
+            "pyi.baz",
+        }
+
+        assert g.file_depends_on(p("pyi/foo.pyi")) == {"pyi", "pyi.bar", "pyi.baz"}
+        assert g.file_depends_on(p("pyi/foo.py")) is None
+        assert g.file_depends_on(p("pyi/bar.pyi")) == {"pyi", "pyi.baz"}
+        assert g.file_depends_on(p("pyi/bar.py")) is None
+        assert g.file_depends_on(p("pyi/baz.py")) == {"pyi"}
+        assert g.file_depends_on(p("pyi/baz.pyi")) is None
+        assert g.file_depends_on(p("pyi/qux.py")) == {
+            "pyi",
+            "pyi.foo",
+            "pyi.bar",
+            "pyi.baz",
+        }
+        assert g.file_depends_on(p("pyi/qux.pyi")) is None
+
+        assert g.affected_by_modules(["pyi.foo"]) == {"pyi.qux"}
+        assert g.affected_by_modules(["pyi.bar"]) == {"pyi.foo", "pyi.qux"}
+        assert g.affected_by_modules(["pyi.baz"]) == {"pyi.bar", "pyi.foo", "pyi.qux"}
+        assert g.affected_by_modules(["pyi.qux"]) == set()
+
+        assert g.affected_by_files([p("pyi/foo.pyi")]) == {p("pyi/qux.py")}
+        assert g.affected_by_files([p("pyi/bar.pyi")]) == {
+            p("pyi/foo.pyi"),
+            p("pyi/qux.py"),
+        }
+        assert g.affected_by_files([p("pyi/baz.py")]) == {
+            p("pyi/bar.pyi"),
+            p("pyi/foo.pyi"),
+            p("pyi/qux.py"),
+        }
+        assert g.affected_by_files([p("pyi/baz.pyi")]) == set()
+        assert g.affected_by_files([p("pyi/qux.py")]) == set()
+        assert g.affected_by_files([p("pyi/qux.pyi")]) == set()
