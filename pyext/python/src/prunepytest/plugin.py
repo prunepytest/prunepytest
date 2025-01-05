@@ -152,13 +152,7 @@ def pytest_configure(config: pytest.Config) -> None:
     import pluggy  # type: ignore[import-untyped]
 
     if pluggy.__version__ < "1.2":
-        raise ValueError("prune-py-test requires pluggy>=1.2")
-
-    if opt.prune_hook:
-        hook = load_hook(config.rootpath, opt.prune_hook, PluginHook)  # type: ignore[type-abstract]
-        hook.setup()
-    else:
-        hook = hook_default(config.rootpath, DefaultHook)
+        raise ValueError("prunepytest requires pluggy>=1.2")
 
     vcs = detect_vcs()
 
@@ -172,23 +166,13 @@ def pytest_configure(config: pytest.Config) -> None:
         graph_path = None
 
     if has_xdist:
-        # when running under xdist we want to avoid redundant work so we save the graph
-        # computed by the controller in a temporary folder shared with all workers
-        # with name that is based on the test run id so every worker can easily find it
-        if not graph_path:
-            tmpdir: pathlib.Path = TempPathFactory.from_config(
-                config, _ispytest=True
-            ).getbasetemp()
-            graph_path = str(tmpdir / "prune-graph.bin")
+        add_xdist_hook(config, graph_path)
 
-        # use xdist hooks to propagate the path to all workers
-        class XdistConfig:
-            @pytest.hookimpl()  # type: ignore
-            def pytest_configure_node(self, node: Any) -> None:
-                # print(f"configure node {node.workerinput['workerid']}: graph_path={graph_path}")
-                node.workerinput["graph_path"] = graph_path
-
-        config.pluginmanager.register(XdistConfig(), "PruneXdistConfig")
+    if opt.prune_hook:
+        hook = load_hook(config.rootpath, opt.prune_hook, PluginHook)  # type: ignore[type-abstract]
+        hook.setup()
+    else:
+        hook = hook_default(config.rootpath, DefaultHook)
 
     graph = GraphLoader(config, hook, graph_path, graph_root)
 
@@ -215,6 +199,26 @@ def pytest_configure(config: pytest.Config) -> None:
             PruneSelector(hook, graph, set(modified), rel_root),
             "PruneSelector",
         )
+
+
+def add_xdist_hook(config: pytest.Config, graph_path: str) -> None:
+    # when running under xdist we want to avoid redundant work so we save the graph
+    # computed by the controller in a temporary folder shared with all workers
+    # with name that is based on the test run id so every worker can easily find it
+    if not graph_path:
+        tmpdir: pathlib.Path = TempPathFactory.from_config(
+            config, _ispytest=True
+        ).getbasetemp()
+        graph_path = str(tmpdir / "prune-graph.bin")
+
+    # use xdist hooks to propagate the path to all workers
+    class XdistConfig:
+        @pytest.hookimpl()  # type: ignore
+        def pytest_configure_node(self, node: Any) -> None:
+            # print(f"configure node {node.workerinput['workerid']}: graph_path={graph_path}")
+            node.workerinput["graph_path"] = graph_path
+
+    config.pluginmanager.register(XdistConfig(), "PruneXdistConfig")
 
 
 def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
