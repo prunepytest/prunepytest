@@ -285,11 +285,13 @@ impl ModuleGraph {
             let _init_pyi = &(depbase.clone() + MAIN_SEPARATOR_STR + "__init__.pyi");
             let _init_py = &_init_pyi[.._init_pyi.len() - 1];
             let _mod_pyi = &(depbase.clone() + ".pyi");
+            let _mod_pyx = &(depbase.clone() + ".pyx");
             let _mod_py = &_mod_pyi[.._mod_pyi.len() - 1];
 
             let candidate_init_pyi = ustr(_init_pyi);
             let candidate_init_py = ustr(_init_py);
             let candidate_module_pyi = ustr(_mod_pyi);
+            let candidate_module_pyx = ustr(_mod_pyx);
             let candidate_module_py = ustr(_mod_py);
 
             if let Some(r) = self
@@ -297,6 +299,7 @@ impl ModuleGraph {
                 .ref_for_fs(candidate_init_py)
                 .or_else(|| self.modules_refs.ref_for_fs(candidate_init_pyi))
                 .or_else(|| self.modules_refs.ref_for_fs(candidate_module_py))
+                .or_else(|| self.modules_refs.ref_for_fs(candidate_module_pyx))
                 .or_else(|| self.modules_refs.ref_for_fs(candidate_module_pyi))
             {
                 let rv = self.modules_refs.get(r);
@@ -308,6 +311,7 @@ impl ModuleGraph {
                 candidate_init_py,
                 candidate_init_pyi,
                 candidate_module_py,
+                candidate_module_pyx,
                 candidate_module_pyi,
             ] {
                 if let Some((dir, name)) = cand.rsplit_once(MAIN_SEPARATOR) {
@@ -364,6 +368,7 @@ impl ModuleGraph {
                             if t.is_dir() {
                                 if fs::exists(e.path().join("__init__.py")).unwrap_or(false)
                                     || fs::exists(e.path().join("__init__.pyi")).unwrap_or(false)
+                                    || fs::exists(e.path().join("__init__.pyx")).unwrap_or(false)
                                 {
                                     Some(name)
                                 } else {
@@ -373,7 +378,9 @@ impl ModuleGraph {
                                 None
                             } else if name.ends_with(".py") && name != "__init__.py" {
                                 Some(name[..name.len() - 3].to_string())
-                            } else if name.ends_with(".pyi") && name != "__init__.pyi" {
+                            } else if (name.ends_with(".pyi") && name != "__init__.pyi")
+                                || (name.ends_with(".pyx") && name != "__init__.pyx")
+                            {
                                 // NB: there might be a duplicate if there is a matching *.py
                                 // however that will be fine downstream as we only ever use
                                 // this list to populate a set of ModuleRef...
@@ -520,37 +527,35 @@ impl ModuleGraph {
         include_typechecking: bool,
         tx: &mpsc::Sender<parser::Error>,
     ) -> WalkState {
-        let filename = e.file_name().to_str().unwrap();
-        // process .pyi if and only if there isn't a corresponding .py
-        // this is useful to handle native code, or generated code that
-        // is not part of normal source tree, but that might still have
-        // relevant dependency information
-        if filename.ends_with(".pyi")
-            && !self.exists_case_sensitive(
-                e.path().parent().unwrap().to_str().unwrap(),
-                &filename[..filename.len() - 1],
-            )
+        let filepath = e.path().to_str().unwrap();
+        if filepath.ends_with(".py") {
+            // normal case: plain python code
+        } else if (filepath.ends_with(".pyx") || filepath.ends_with(".pyi"))
+            && !fs::exists(&filepath[..filepath.len() - 1]).unwrap_or(true)
         {
-            info!("info: allowing pyi {}", filename);
-            // TODO: record dependency on corresponding *.pyx / *.pxd if present
-            // this would allow more accurately tracking changes to native code
-            // we would either have to allow a single module ref to point to a set of files
-            // instead of a single file, or have an extra ref for the extra files and add
-            // dependency edges appropriately
-            // option 2 seems preferable, and would mesh better with, for instance, explicit
-            // annotation of data dependencies
-        } else if !filename.ends_with(".py") {
+            // process .pyi / .pyx if and only if there isn't a corresponding .py
+            // this is useful to handle native code, or generated code that
+            // is not part of normal source tree, but that might still have
+            // relevant dependency information
+
+            // give precedence to pyx over pyi if both are present
+            if filepath.ends_with("i")
+                && fs::exists(&(filepath[..filepath.len() - 1].to_string() + "x")).unwrap_or(false)
+            {
+                return WalkState::Continue;
+            }
+            info!("info: allowing {}", filepath);
+        } else {
             return WalkState::Continue;
         }
-        debug!("parse: {}", filename);
-        let filepath = e.path().to_str().unwrap();
+        debug!("parse: {}", filepath);
         let res = self.fs_to_py(filepath);
         if res.is_none() {
             return WalkState::Continue;
         }
         let (pkg, module) = res.unwrap();
 
-        // remove .py[i] suffix, turn / into .
+        // remove .py[i|x] suffix, turn / into .
         // NB: preserve __init__ for correct relative import resolution
         let suffix_idx = module.rfind('.').unwrap();
         let module = module[..suffix_idx].replace(MAIN_SEPARATOR, ".");

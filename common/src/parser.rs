@@ -165,6 +165,11 @@ pub fn raw_get_all_imports(
     include_typechecking: bool,
 ) -> Result<(bool, Vec<String>), Error> {
     let source = read_to_string(filepath).map_err(Error::IO)?;
+    if filepath.ends_with(".pyx") {
+        // TODO: extend ruff parser to support parsing *.pyx files
+        // or do a best-effort string extraction...
+        return Ok((false, Vec::new()));
+    }
     Ok((
         filepath.ends_with("__init__.py") && content_looks_like_pkgutil_ns_init(&source),
         raw_imports_from_module(&source, module, deep, include_typechecking)
