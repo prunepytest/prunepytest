@@ -212,7 +212,7 @@ def pytest_configure(config: pytest.Config) -> None:
         print(f"modified: {modified}")
 
         config.pluginmanager.register(
-            PruneSelector(hook, graph, set(modified)),
+            PruneSelector(hook, graph, set(modified), rel_root),
             "PruneSelector",
         )
 
@@ -503,11 +503,16 @@ class PruneSelector:
     """
 
     def __init__(
-        self, hook: PluginHook, graph: GraphLoader, modified: AbstractSet[str]
+        self,
+        hook: PluginHook,
+        graph: GraphLoader,
+        modified: AbstractSet[str],
+        rel_root: pathlib.Path,
     ) -> None:
         self.hook = hook
         self.graph = graph
         self.modified = modified
+        self.rel_root = rel_root
 
     @pytest.hookimpl(trylast=True)  # type: ignore
     def pytest_collection_modifyitems(
@@ -555,6 +560,10 @@ class PruneSelector:
         while i >= 0:
             item = items[i]
             file, data = actual_test_file(item)
+
+            # adjust path if graph_root != config.rootpath
+            file = str(self.rel_root / file)
+            data = str(self.rel_root / data) if data else data
 
             if file not in covered_files:
                 covered_files[file] = g.file_depends_on(file) is not None
