@@ -599,7 +599,9 @@ impl ModuleGraph {
     }
 
     fn add_dynamic_dep(&self, r: ModuleRef, deps: HashSet<String>) {
-        let mut cur_deps = self.global_ns.get_mut(&r).unwrap();
+        // NB: insert a new set of deps if none exits
+        // this is necessary to allow attaching dynamic deps to external imports
+        let mut cur_deps = self.global_ns.entry(r).or_default();
         deps.iter().for_each(|dep| {
             if dep.ends_with(".*") {
                 let dep_prefix = &dep[..dep.len() - 1];
