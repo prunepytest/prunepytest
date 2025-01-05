@@ -33,6 +33,8 @@ class Arg(Enum):
 
 @dataclass
 class ArgValues:
+    _rest: List[str]
+
     hook_path: Optional[str] = None
     graph_path: Optional[str] = None
     modified: Optional[List[str]] = None
@@ -51,7 +53,9 @@ def _transform(v: str, t: Any) -> Any:
     return v
 
 
-_arg_types: Dict[Arg, Any] = {Arg[f.name]: f.type for f in fields(ArgValues)}
+_arg_types: Dict[Arg, Any] = {
+    Arg[f.name]: f.type for f in fields(ArgValues) if not f.name.startswith("_")
+}
 
 
 def parse_args(
@@ -72,8 +76,9 @@ def parse_args(
         sys.exit(2)
 
     return ArgValues(
+        _rest=rest,
         **{
             a.name: _transform(getattr(valid, a.value.replace("-", "_")), _arg_types[a])
             for a in supported_args
-        }
+        },
     )
