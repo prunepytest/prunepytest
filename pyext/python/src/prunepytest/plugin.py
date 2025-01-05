@@ -249,14 +249,21 @@ def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
        validation errors
     """
     f = item.location[0]
-    if not f.endswith(".py"):
-        p = item.parent
-        while p:
-            if p.name.endswith(".py") and os.path.isfile(p.path):
-                rel = p.path.relative_to(item.config.rootpath)
-                # print(f"mapped {f} -> {rel} {p.path}", file=sys.stderr)
-                return str(rel), f
-            p = p.parent
+    # okay, this gets weird: sometimes the location is a straightforward
+    # python file, but it doesn't match the topmost test item which is
+    # also a straightforward python file. This happens when abstracting
+    # out common tests in a base class for instance. pytest will be able
+    # to point to the correct file in which the test is actually defined,
+    # but for the purpose of the import graph, we want the outermost file,
+    # not the innermost one...
+    p = item.parent
+    while p:
+        if p.name.endswith(".py") and os.path.isfile(p.path):
+            rel = p.path.relative_to(item.config.rootpath)
+            # print(f"mapped {f} -> {rel} {p.path}", file=sys.stderr)
+            return str(rel), f
+        p = p.parent
+
     return f, None
 
 
@@ -430,7 +437,8 @@ class PruneValidator:
         # avoid spurious validation errors when using multiprocessing
         self.expected_imports |= {import_path}
 
-        # print(f"validated runtest: {f} [ {item} ]", file=sys.stderr)
+        if item.session.config.option.verbose > 1:
+            print(f"validated runtest: {f} [ {item} ]")  # , file=sys.stderr)
 
         # keep track of warnings emitted by the import callback, to avoid double-reporting
         warnings_emitted = set()
@@ -475,8 +483,8 @@ class PruneValidator:
         unexpected = caused_by_test - expected - warnings_emitted
         if unexpected:
             # TODO: detail where the dynamic imports are coming from
-            print(self.tracker.dynamic_users.get(import_path))
-            print(self.tracker.dynamic_imports)
+            # print(self.tracker.dynamic_users.get(import_path))
+            # print(self.tracker.dynamic_imports)
             _report_unexpected(item, unexpected)
 
         return outcome
