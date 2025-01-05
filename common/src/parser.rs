@@ -2,7 +2,7 @@
 
 use regex::Regex;
 use ruff_python_ast::visitor::source_order::{walk_expr, walk_stmt, SourceOrderVisitor};
-use ruff_python_ast::{Expr, Stmt};
+use ruff_python_ast::{Expr, ExprCall, Stmt};
 use ruff_python_parser::{parse_module, ParseError};
 use ruff_text_size::Ranged;
 use std::fmt::Display;
@@ -40,6 +40,30 @@ pub fn split_at_depth(filepath: &'_ str, sep: char, depth: usize) -> (&'_ str, &
         }
     }
     (&filepath[0..idx], &filepath[idx + 1..])
+}
+
+fn _string_lit_arg(call: &ExprCall) -> Option<String> {
+    if call.arguments.args.len() != 1 {
+        return None;
+    }
+    call.arguments.args[0]
+        .as_string_literal_expr()
+        .map(|lit| lit.value.to_string())
+}
+
+fn _match_import_fn(call: &ExprCall) -> bool {
+    if let Some(n) = call.func.as_name_expr() {
+        return n.id.as_str() == "__import__" || n.id.as_str() == "import_module";
+    } else if let Some(x) = call.func.as_attribute_expr() {
+        if let Some(m) = x.value.as_name_expr() {
+            if (m.id.as_str() == "importlib" && x.attr.id.as_str() == "import_module")
+                || (m.id.as_str() == "builtins" && x.attr.id.as_str() == "__import__")
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 struct ImportExtractor<'a> {
@@ -110,7 +134,18 @@ impl<'b> SourceOrderVisitor<'b> for ImportExtractor<'_> {
     }
 
     fn visit_expr(&mut self, expr: &'b Expr) {
-        if let Some(name) = expr.as_name_expr() {
+        // NB: best-effort matching of calls to import_module or __import__ with constant strings
+        // i.e. dynamic imports that are actually statically resolvable...
+        if let Some(call) = expr.as_call_expr() {
+            if _match_import_fn(call) {
+                if let Some(arg) = _string_lit_arg(call) {
+                    // NB: we will still flag dynamic imports
+                    // as a refinement, we might want to avoid flagging dynamic imports
+                    // if they are all statically resolvable...
+                    self.imports.push(arg);
+                }
+            }
+        } else if let Some(name) = expr.as_name_expr() {
             // special handling of references to __import__
             // this is done to allow flagging of dynamic imports that bypass importlib
             if name.id.as_str() == "__import__" {

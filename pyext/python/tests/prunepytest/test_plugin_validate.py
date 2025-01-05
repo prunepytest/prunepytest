@@ -86,7 +86,7 @@ def test_succeed_test_file_in_graph_static_import(pytester):
     result.assert_outcomes(passed=1)
 
 
-def test_fail_test_file_in_graph_dynamic_import(pytester):
+def test_succeed_test_file_in_graph_statically_resolved_dynamic_import(pytester):
     blah: pathlib.Path = pytester.mkpydir("blah")
     write_text(
         blah.joinpath("stuff.py"),
@@ -98,6 +98,46 @@ def test_fail_test_file_in_graph_dynamic_import(pytester):
         """
         def test_noop():
              __import__('blah.stuff')
+        """,
+    )
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select")
+    result.assert_outcomes(passed=1)
+
+
+def test_succeed_test_file_in_graph_statically_resolved_dynamic_import_2(pytester):
+    blah: pathlib.Path = pytester.mkpydir("blah")
+    write_text(
+        blah.joinpath("stuff.py"),
+        """
+        """,
+    )
+    write_text(
+        blah.joinpath("test_stuff.py"),
+        """
+        import importlib
+        def test_noop():
+             importlib.import_module('blah.stuff')
+        """,
+    )
+    pytester.plugins = ["prunepytest"]
+    result = pytester.runpytest("--prune", "--prune-no-select")
+    result.assert_outcomes(passed=1)
+
+
+def test_fail_test_file_in_graph_dynamic_import(pytester):
+    blah: pathlib.Path = pytester.mkpydir("blah")
+    write_text(
+        blah.joinpath("stuff.py"),
+        """
+        """,
+    )
+    write_text(
+        blah.joinpath("test_stuff.py"),
+        """
+        def test_noop():
+             x = 'blah.stuff'
+             __import__(x)
         """,
     )
     pytester.plugins = ["prunepytest"]
@@ -116,7 +156,8 @@ def test_warn_test_file_in_graph_dynamic_import(pytester):
         blah.joinpath("test_stuff.py"),
         """
         def test_noop():
-             __import__('blah.stuff')
+             x = 'blah.stuff'
+             __import__(x)
         """,
     )
     pytester.plugins = ["prunepytest"]
