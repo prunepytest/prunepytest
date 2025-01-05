@@ -29,7 +29,7 @@ from _pytest.runner import CallInfo
 from _pytest.tmpdir import TempPathFactory
 
 from .graph import ModuleGraph
-from .api import PluginHook, DefaultHook
+from .api import BaseHook, PluginHook, DefaultHook
 from .defaults import hook_default
 from .util import chdir, load_import_graph, load_hook
 from .tracker import Tracker, relevant_frame_index, warning_skip_level
@@ -523,6 +523,33 @@ class PruneSelector:
         covered_files = {}
         always_run = self.hook.always_run()
 
+        # if the hook doesn't implement at least one of the methods related to dynamic imports
+        # then check the import graph for files with dynamic imports
+        # test files in that set will not be eligible for pruning
+        has_unhandled_dyn_imports = (
+            {}
+            if (
+                self.hook.__class__.dynamic_dependencies
+                is BaseHook.dynamic_dependencies
+                and self.hook.__class__.dynamic_dependencies_at_leaves
+                is BaseHook.dynamic_dependencies_at_leaves
+            )
+            else g.affected_by_modules({"importlib", "__import__"})
+        )
+
+        if has_unhandled_dyn_imports:
+            # TODO: pytest logging facility?
+            print(
+                f"WARN: disabling pruning for files with unhandled dynamic imports: {has_unhandled_dyn_imports}"
+            )
+
+        # safety: track if modified files are all in one of
+        #  - in ModuleGraph
+        #  - data files referenced in collected test items
+        #  - file marked as always_run by hook
+        #  - file marked as irrelevant by hook
+        remaining = set(self.modified)
+
         # loop from the end to easily remove items as we go
         i = len(items) - 1
         while i >= 0:
@@ -531,6 +558,11 @@ class PruneSelector:
 
             if file not in covered_files:
                 covered_files[file] = g.file_depends_on(file) is not None
+
+            if covered_files[file]:
+                remaining.discard(file)
+            if data:
+                remaining.discard(data)
 
             # keep the test item if any of the following holds:
             # 1. python test file is not covered by the import graph
@@ -546,17 +578,31 @@ class PruneSelector:
                 or (file in affected)
                 or (data and data in self.modified)
                 or (file in always_run)
+                or (data and data in always_run)
                 or (item.name in always_run)
+                or (file in has_unhandled_dyn_imports)
             )
             if not keep:
                 skipped.append(item)
                 del items[i]
             i -= 1
 
-        session.ihook.pytest_deselected(items=skipped)
+        remaining -= always_run
+        remaining -= {x for x in remaining if g.file_depends_on(file) is not None}
+        remaining = self.hook.filter_irrelevant_files(remaining)
 
+        if remaining:
+            # TODO: pytest logging facility?
+            print(
+                f"WARN: disabling pruning due to unhandled modified files: {remaining}"
+            )
+            items += skipped
+        else:
+            session.ihook.pytest_deselected(items=skipped)
+
+        # TODO: select-only mode to measure impact
         if config.option.verbose > 1:
-            print(f"skipped: {len(skipped)}/{n}")
+            print(f"prunepytest: skipped={len(skipped)}/{n}")
 
     @pytest.hookimpl(trylast=True)  # type: ignore
     def pytest_sessionfinish(

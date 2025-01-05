@@ -9,7 +9,7 @@ import os
 from abc import ABC, abstractmethod, ABCMeta
 from fnmatch import fnmatch
 
-from typing import AbstractSet, Any, Mapping, Optional, Sequence, Tuple
+from typing import AbstractSet, Any, Mapping, Optional, Sequence, Set, Tuple
 
 
 class BaseHook(ABC):
@@ -274,6 +274,24 @@ class PluginHook(BaseHook, TrackerMixin, metaclass=ABCMeta):
         NB: this does *not* affect the import-time validator
         """
         return frozenset()
+
+    def filter_irrelevant_files(self, files: Set[str]) -> Set[str]:
+        """
+        given a set of files, filter out those that are deemed irrelevant for
+        testing purposes.
+
+        By default prunepytest operates very conservatively, and will disable
+        test pruning if the set of modified files includes files outside of the
+        Python import graph.
+
+        Typically, documentation and other files that are neither code, nor data
+        used by the code, can be ignored for the the purpose of test selection.
+        However what files are safe to ignore can vary widely depending between
+        projects, so the default implementation is a no-op, to prioritize safety
+        over maximum test pruning. A custom implementation allows more commits to
+        leverage test pruning
+        """
+        return files
 
 
 class ValidatorHook(PluginHook, ValidatorMixin, metaclass=ABCMeta):
