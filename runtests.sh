@@ -5,15 +5,14 @@ readonly abs_dir=$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
 
 cd "${abs_dir}/pyext"
 
+maturin=(maturin)
 if command -v uv ; then
   mk_venv=(uv venv)
   install_deps=(uv pip sync)
-  maturin=(uvx maturin)
   pip=(uv pip)
 else
   mk_venv=(python3 -m venv)
   install_deps=(python -m pip install -r)
-  maturin=(maturin)
   pip=(python3 -m pip)
 fi
 
