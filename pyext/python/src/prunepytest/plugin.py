@@ -204,7 +204,7 @@ def pytest_configure(config: pytest.Config) -> None:
         print(f"modified: {modified}")
 
         config.pluginmanager.register(
-            PruneSelector(hook, graph, set(modified), rel_root),
+            PruneSelector(hook, graph, set(modified) - {""}, rel_root),
             "PruneSelector",
         )
 
@@ -545,7 +545,6 @@ class PruneSelector:
 
         g = self.graph.get(session)
         affected = g.affected_by_files(self.modified) | self.modified
-        # print(f"affected: {affected}", file=sys.stderr)
 
         covered_files = {}
         always_run = self.hook.always_run()
@@ -554,14 +553,14 @@ class PruneSelector:
         # then check the import graph for files with dynamic imports
         # test files in that set will not be eligible for pruning
         has_unhandled_dyn_imports = (
-            {}
+            g.affected_by_modules({"importlib", "__import__"})
             if (
                 self.hook.__class__.dynamic_dependencies
                 is BaseHook.dynamic_dependencies
                 and self.hook.__class__.dynamic_dependencies_at_leaves
                 is BaseHook.dynamic_dependencies_at_leaves
             )
-            else g.affected_by_modules({"importlib", "__import__"})
+            else set()
         )
 
         if has_unhandled_dyn_imports:
@@ -619,7 +618,7 @@ class PruneSelector:
             i -= 1
 
         remaining -= always_run
-        remaining -= {x for x in remaining if g.file_depends_on(file) is not None}
+        remaining -= {x for x in remaining if g.file_depends_on(x) is not None}
         remaining = self.hook.filter_irrelevant_files(remaining)
 
         if remaining:
@@ -632,7 +631,7 @@ class PruneSelector:
             session.ihook.pytest_deselected(items=skipped)
 
         # TODO: select-only mode to measure impact
-        if config.option.verbose > 1:
+        if config.option.verbose >= 1:
             print(f"prunepytest: skipped={len(skipped)}/{n}")
 
     @pytest.hookimpl(trylast=True)  # type: ignore
