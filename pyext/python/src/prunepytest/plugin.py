@@ -20,7 +20,7 @@ import warnings
 import pathlib
 import pytest
 
-from typing import Any, AbstractSet, Optional, List, Generator, Tuple
+from typing import cast, Any, AbstractSet, Optional, List, Generator, Tuple
 
 from _pytest._code import Traceback
 from _pytest.config import ExitCode
@@ -45,6 +45,14 @@ except ImportError:
     has_xdist = False
 
     def is_xdist_controller(session: pytest.Session) -> bool:
+        return False
+
+
+def safe_is_xdist_controller(session: pytest.Session) -> bool:
+    try:
+        return cast(bool, is_xdist_controller(session))
+    except AttributeError:
+        # if the plugin is present but explicitly disabled...
         return False
 
 
@@ -165,8 +173,8 @@ def pytest_configure(config: pytest.Config) -> None:
     if graph_path and not os.path.isfile(graph_path):
         graph_path = None
 
-    if has_xdist:
-        add_xdist_hook(config, graph_path)
+    if has_xdist and config.pluginmanager.has_plugin("xdist"):
+        graph_path = add_xdist_hook(config, graph_path)
 
     if opt.prune_hook:
         hook = load_hook(config.rootpath, opt.prune_hook, PluginHook)  # type: ignore[type-abstract]
@@ -201,7 +209,7 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
-def add_xdist_hook(config: pytest.Config, graph_path: str) -> None:
+def add_xdist_hook(config: pytest.Config, graph_path: str) -> str:
     # when running under xdist we want to avoid redundant work so we save the graph
     # computed by the controller in a temporary folder shared with all workers
     # with name that is based on the test run id so every worker can easily find it
@@ -219,6 +227,8 @@ def add_xdist_hook(config: pytest.Config, graph_path: str) -> None:
             node.workerinput["graph_path"] = graph_path
 
     config.pluginmanager.register(XdistConfig(), "PruneXdistConfig")
+
+    return graph_path
 
 
 def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
@@ -287,7 +297,7 @@ class GraphLoader:
             with chdir(self.graph_root):
                 graph = load_import_graph(self.hook, load_path, rel_root=rel_root)
 
-            if is_xdist_controller(session) and not load_path:
+            if safe_is_xdist_controller(session) and not load_path:
                 print(f"saving import graph to {self.graph_path}")
                 graph.to_file(self.graph_path)
 
@@ -343,7 +353,7 @@ class PruneValidator:
     def pytest_sessionstart(
         self, session: pytest.Session
     ) -> Generator[Any, None, None]:
-        if is_xdist_controller(session):
+        if safe_is_xdist_controller(session):
             self.is_controller = True
             # ensure the import graph is computed before the workers need it
             self.graph.get(session)
