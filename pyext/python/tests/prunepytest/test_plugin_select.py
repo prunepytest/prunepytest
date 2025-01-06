@@ -8,7 +8,7 @@ from _pytest._code import Source
 
 # for the import parser
 if False:
-    from prunepytest import plugin  # noqa
+    from prunepytest.pytest import plugin  # noqa
 
 
 def write_text(path, content):

@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
+
+"""
+This module is an implementation detail: there is no guarantee of forward
+or backwards compatibility, even across patch releases.
+"""
+
+import os
+
+from typing import cast, Optional, Tuple
+
+import pytest
+
+from ..api import PluginHook
+from ..graph import ModuleGraph
+from ..util import chdir, load_import_graph
+
+
+# detect xdist and adjust behavior accordingly
+try:
+    from xdist import is_xdist_controller  # type: ignore[import-not-found]
+
+    has_xdist = True
+except ImportError:
+    has_xdist = False
+
+    def is_xdist_controller(session: pytest.Session) -> bool:
+        return False
+
+
+def safe_is_xdist_controller(session: pytest.Session) -> bool:
+    try:
+        return cast(bool, is_xdist_controller(session))
+    except AttributeError:
+        # if the plugin is present but explicitly disabled...
+        return False
+
+
+def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
+    """
+    Given a pytest Item, return the path of the test file it comes from
+
+    This is usually straightforwardly obtained from item.location[0], but
+    sometimes that location does not point to a covered Python file.
+
+    In that case, we perform a best-effort handling of data-driven tests,
+    by walking up the Item tree, and looking for a parent whose path is
+    a real Python file. If no such file can be found, the test item will
+    be treated safely:
+
+     - it is never be deselected based on import graph/modified files
+     - import validation is skipped, since we cannot infer a reasonable
+       set of imports for that test item, and we want to avoid spurious
+       validation errors
+    """
+    f = item.location[0]
+    # okay, this gets weird: sometimes the location is a straightforward
+    # python file, but it doesn't match the topmost test item which is
+    # also a straightforward python file. This happens when abstracting
+    # out common tests in a base class for instance. pytest will be able
+    # to point to the correct file in which the test is actually defined,
+    # but for the purpose of the import graph, we want the outermost file,
+    # not the innermost one...
+    p = item.parent
+    while p:
+        if p.name.endswith(".py") and os.path.isfile(p.path):
+            rel = p.path.relative_to(item.config.rootpath)
+            # print(f"mapped {f} -> {rel} {p.path}", file=sys.stderr)
+            return str(rel), f
+        p = p.parent
+
+    return f, None
+
+
+class GraphLoader:
+    """
+    Helper class to abstract away the loading of the import graph, and deal
+    with some of the intricacies of interfacing with pytest-xdist
+    """
+
+    def __init__(
+        self, config: pytest.Config, hook: PluginHook, graph_path: str, graph_root: str
+    ) -> None:
+        self.config = config
+        self.hook = hook
+        self.graph_path = graph_path
+        self.graph_root = graph_root
+        self.graph: Optional[ModuleGraph] = None
+
+    def get(self, session: pytest.Session) -> ModuleGraph:
+        if not self.graph:
+            self.graph = self.load(session)
+        return self.graph
+
+    def load(self, session: pytest.Session) -> ModuleGraph:
+        if hasattr(session.config, "workerinput"):
+            graph_path = session.config.workerinput["graph_path"]
+            # print(f"worker loading graph from {graph_path}")
+            graph = ModuleGraph.from_file(graph_path)
+        else:
+            load_path = (
+                self.graph_path
+                if self.graph_path and os.path.isfile(self.graph_path)
+                else None
+            )
+
+            rel_root = self.config.rootpath.relative_to(self.graph_root)
+
+            with chdir(self.graph_root):
+                graph = load_import_graph(self.hook, load_path, rel_root=rel_root)
+
+            if safe_is_xdist_controller(session) and not load_path:
+                print(f"saving import graph to {self.graph_path}")
+                graph.to_file(self.graph_path)
+
+        return graph
