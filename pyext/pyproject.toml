@@ -31,7 +31,7 @@ Respository = "https://github.com/taste-prune-pie/prune-py-test.git"
 Issues = "https://github.com/taste-prune-pie/prune-py-test/issues"
 
 [project.entry-points.pytest11]
-prunepytest = "prunepytest.plugin"
+prunepytest = "prunepytest.pytest.plugin"
 
 [tool.maturin]
 python-source = "python/src"
