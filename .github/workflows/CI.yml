@@ -52,6 +52,13 @@ jobs:
         if: matrix.platform.target == 'x86_64'
         run: |
           RUST_BACKTRACE=1 cargo nextest run
+      - name: set version from tag
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref }}
+        run: |
+          sed -E -i 's/^version *= *"[^"]*"/version = "'${RELEASE_TAG##*/v}'"/g' Cargo.toml
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -143,6 +150,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.platform.target }}
       - uses: dtolnay/rust-toolchain@1.83
+      - name: set version from tag
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref }}
+        run: |
+          sed -E -i 's/^version *= *"[^"]*"/version = "'${RELEASE_TAG##*/v}'"/g' Cargo.toml
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -185,6 +199,13 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
+      - name: set version from tag
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref }}
+        run: |
+          sed -E -i '' 's/^version *= *"[^"]*"/version = "'${RELEASE_TAG##*/v}'"/g' Cargo.toml
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -206,7 +227,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs: [linux, windows, macos]
     permissions:
       # Use to sign the release artifacts
@@ -222,7 +243,6 @@ jobs:
         with:
           subject-path: 'wheels-*/*'
       - name: Publish to PyPI
-        if: "startsWith(github.ref, 'refs/tags/')"
         uses: PyO3/maturin-action@v1
         with:
           command: upload

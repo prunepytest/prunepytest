@@ -3,7 +3,7 @@ members = ["common", "pyext", "cmd"]
 resolver = "2"
 
 [workspace.package]
-version = "0.6.3"
+version = "0.6.4+git"
 edition = "2021"
 rust-version = "1.83"
 homepage = "https://github.com/prunepytest/prunepytest"
