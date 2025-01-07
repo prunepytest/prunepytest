@@ -303,10 +303,11 @@ class PruneImpact(_BaseSelector):
         print("among commits that benefit from pruning:")
         print(f" - mean gain: {statistics.mean(relgain):.1%} test cases skipped")
         print(f" - median gain: {statistics.median(relgain):.1%} test cases skipped")
-        print(
-            " - deciles of gain:",
-            [f"{x:.1%}" for x in statistics.quantiles(relgain, n=10)],
-        )
+        if hasattr(statistics, "quantiles"):
+            print(
+                " - deciles of gain:",
+                [f"{x:.1%}" for x in statistics.quantiles(relgain, n=10)],
+            )
 
         # deselect everything to prevent running tests
         session.ihook.pytest_deselected(items=list(items))
