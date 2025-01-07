@@ -242,14 +242,8 @@ class Tracker:
         self.dynamic_ignores = dynamic_ignores or {}
         self.implicit_anchor_aggregation = implicit_anchor_aggregation
 
-        # resolve anchors to already-loaded modules
-        # the rest will be resolved as needed when relevant modules are loaded
-        for mod_name, m in sys.modules.items():
-            if hasattr(m, "__file__") and m.__file__:
-                self.file_to_module[m.__file__] = mod_name
-            if dynamic_anchors and mod_name in dynamic_anchors:
-                for fn in dynamic_anchors[mod_name]:
-                    self.add_dynamic_usage_recorder(m, mod_name, fn)
+        self._init_loaded_modules()
+
         if log_file:
             self.log_file = (
                 log_file if isinstance(log_file, io.IOBase) else open(log_file, "a")
@@ -748,3 +742,27 @@ class Tracker:
         if anchor is None:
             self.dynamic.append(dyn_stack)
         return prev_stack, anchor, is_ignored
+
+    def _init_loaded_modules(self) -> None:
+        # resolve anchors to already-loaded modules
+        # the rest will be resolved as needed when relevant modules are loaded
+
+        modules = set()
+        new_modules = set(sys.modules.keys())
+
+        # NB: in some weird cases, the inner loop can cause new modules to be loaded ?!?!?
+        # This was seen in github runners when running pre-test validation on pandas...
+        # In that case we want to keep going until no new modules are loaded, and all modules
+        # have actually been processed to ensure accurate file->module mapping and dynamic
+        # usage recording
+        while new_modules:
+            for mod_name in new_modules:
+                m = sys.modules[mod_name]
+                if hasattr(m, "__file__") and m.__file__:
+                    self.file_to_module[m.__file__] = mod_name
+                if self.dynamic_anchors and mod_name in self.dynamic_anchors:
+                    for fn in self.dynamic_anchors[mod_name]:
+                        self.add_dynamic_usage_recorder(m, mod_name, fn)
+
+            modules.update(new_modules)
+            new_modules = sys.modules.keys() - modules
