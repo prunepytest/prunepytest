@@ -9,7 +9,7 @@ import os
 from abc import ABC, abstractmethod, ABCMeta
 from fnmatch import fnmatch
 
-from typing import AbstractSet, Any, Mapping, Optional, Sequence, Set, Tuple
+from typing import AbstractSet, Any, Mapping, Optional, Sequence, Tuple
 
 
 class BaseHook(ABC):
