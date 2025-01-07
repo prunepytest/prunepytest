@@ -1,0 +1,39 @@
+name: impact
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+
+permissions:
+  contents: read
+
+jobs:
+  impact:
+    runs-on: ubuntu-latest
+    # TODO: skip this one for commits that don't touch py or rust code?
+    # maybe make it opt-in?
+    steps:
+      - uses: actions/checkout@v4
+        # TODO: use tags or some other way to reference known-good version?
+      - uses: actions/checkout@v4
+        with:
+          path: '_validation'
+          repository: prunepytest/prunepytest-validation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.9
+      - uses: dtolnay/rust-toolchain@1.83
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        # TODO: extract impact analysis results in an easily digestible format
+      - name: Run tests and impact analysis
+        run: |
+          set -ex
+          export MATURIN_FLAGS="--compatibility=linux --auditwheel=skip"
+          VALIDATE=0 EXTRA_TESTS=_validation/runtests.sh ./runtests.sh
