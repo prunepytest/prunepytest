@@ -10,6 +10,7 @@ import os
 from typing import cast, Optional, Tuple
 
 import pytest
+import _pytest.unittest
 
 from ..api import PluginHook
 from ..graph import ModuleGraph
@@ -53,23 +54,24 @@ def actual_test_file(item: pytest.Item) -> Tuple[str, Optional[str]]:
        set of imports for that test item, and we want to avoid spurious
        validation errors
     """
-    f = item.location[0]
-    # okay, this gets weird: sometimes the location is a straightforward
-    # python file, but it doesn't match the topmost test item which is
-    # also a straightforward python file. This happens when abstracting
-    # out common tests in a base class for instance. pytest will be able
-    # to point to the correct file in which the test is actually defined,
-    # but for the purpose of the import graph, we want the outermost file,
-    # not the innermost one...
+
+    # for normal functions, filepath is best obtained by walking up the collection tree
+    # to the Module, rather than resolving the actual location of the underlying code
+    # for more exotic collection setups, for instance data-drive test cases as seen in
+    # mypy's repo, we do want to extract the most accurate location data possible
+    f = (
+        None
+        if isinstance(item, (pytest.Function, _pytest.unittest.TestCaseFunction))
+        else item.location[0]
+    )
+
     p = item.parent
     while p:
-        if p.name.endswith(".py") and os.path.isfile(p.path):
-            rel = p.path.relative_to(item.config.rootpath)
-            # print(f"mapped {f} -> {rel} {p.path}", file=sys.stderr)
-            return str(rel), f
+        if isinstance(p, pytest.File):
+            return str(p.path), f
         p = p.parent
 
-    return f, None
+    return f if f else item.location[0], None
 
 
 class GraphLoader:

@@ -41,6 +41,33 @@ def pytest_addoption(parser: Any, pluginmanager: pytest.PytestPluginManager) -> 
     )
 
     group.addoption(
+        "--prune-impact",
+        action="store_true",
+        dest="prune_impact",
+        help=(
+            "Whether to do expected impact analysis (skips tests, similar to collect-only)"
+        ),
+    )
+
+    group.addoption(
+        "--prune-impact-list",
+        action="store",
+        dest="prune_impact_list",
+        help=(
+            "Path to a file holding a list of commit hashes to consider for impact analysis, 1 per line"
+        ),
+    )
+
+    group.addoption(
+        "--prune-impact-depth",
+        action="store",
+        dest="prune_impact_depth",
+        type=int,
+        default=20,
+        help=("Number of recent commits to include in impact analysis"),
+    )
+
+    group.addoption(
         "--prune-no-validate",
         action="store_true",
         dest="prune_novalidate",
@@ -117,15 +144,12 @@ def pytest_configure(config: pytest.Config) -> None:
     if not opt.prune:
         return
 
-    # Skip this plugin entirely when only doing collection.
-    if config.getvalue("collectonly"):
+    impact_only = False
+    if opt.prune_impact:
+        impact_only = True
+    elif config.getvalue("collectonly"):
+        # Skip this plugin entirely when only doing collection.
         return
-
-    # old versions of pluggy do not have force_exception...
-    import pluggy  # type: ignore[import-untyped]
-
-    if pluggy.__version__ < "1.2":
-        raise ValueError("prunepytest requires pluggy>=1.2")
 
     vcs = detect_vcs()
 
@@ -149,6 +173,24 @@ def pytest_configure(config: pytest.Config) -> None:
 
     graph = GraphLoader(config, hook, graph_path, graph_root)
 
+    if impact_only:
+        if not vcs:
+            raise ValueError("No VCS detected")
+
+        if opt.prune_impact_list:
+            with open(opt.prune_impact_list) as f:
+                commits = f.read().splitlines()
+        else:
+            commits = vcs.recent_commits(opt.prune_impact_depth)
+
+        from .selector import PruneImpact
+
+        config.pluginmanager.register(
+            PruneImpact(config, hook, graph, rel_root, vcs, commits),
+            "PruneValidator",
+        )
+        return
+
     if not opt.prune_novalidate:
         from .validator import PruneValidator
 
@@ -159,21 +201,22 @@ def pytest_configure(config: pytest.Config) -> None:
 
     if not opt.prune_noselect:
         if opt.prune_modified is not None:
-            modified = opt.prune_modified.split(",")
+            modified = set(opt.prune_modified.split(","))
         elif vcs:
-            modified = (
+            modified = set(
                 vcs.modified_files(base_commit=opt.prune_base_commit)
                 + vcs.dirty_files()
             )
         else:
             raise ValueError("unsupported VCS for test selection...")
 
-        print(f"modified: {modified}")
+        if opt.verbose >= 1:
+            print(f"modified: {modified}")
 
         from .selector import PruneSelector
 
         config.pluginmanager.register(
-            PruneSelector(hook, graph, set(modified) - {""}, rel_root),
+            PruneSelector(config, hook, graph, modified - {""}, rel_root),
             "PruneSelector",
         )
 

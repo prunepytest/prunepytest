@@ -5,6 +5,7 @@ This module is an implementation detail: there is no guarantee of forward
 or backwards compatibility, even across patch releases.
 """
 
+import os
 import pathlib
 import warnings
 
@@ -124,6 +125,11 @@ class PruneValidator:
             return (yield)
 
         f, _ = actual_test_file(item)
+        # make absolute paths relative to pytest root path
+        if os.path.isabs(f):
+            rp = str(item.config.rootpath)
+            assert f.startswith(rp)
+            f = f[len(rp) + 1 :]
 
         # TODO: might need further path adjustment?
         graph_path = str(self.rel_root / f) if self.rel_root else f
