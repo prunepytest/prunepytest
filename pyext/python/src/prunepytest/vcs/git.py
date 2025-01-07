@@ -44,6 +44,16 @@ class Git(VCS):
             .rstrip()
         )
 
+    def recent_commits(self, n: int) -> List[str]:
+        return [
+            commit_line.partition(" ")[0]
+            for commit_line in subprocess.check_output(
+                ["git", "log", "--oneline", "-n", str(n)]
+            )
+            .decode("utf-8")
+            .splitlines()
+        ]
+
     def list_remotes(self) -> List[str]:
         return (
             subprocess.check_output(
@@ -117,12 +127,10 @@ class Git(VCS):
     def modified_files(
         self, commit_id: str = "HEAD", base_commit: Optional[str] = None
     ) -> List[str]:
-        if base_commit is None:
-            base_commit = self.fork_point(commit_id)
         return list(
             itertools.chain.from_iterable(
-                # remove status letters, strip whitespaces, and split to catch both sides of renames
-                status[2:].strip().split()
+                # remove status, strip whitespaces, and split to catch both sides of renames
+                status.split()[1:]
                 for status in subprocess.check_output(
                     [
                         "git",
@@ -136,6 +144,6 @@ class Git(VCS):
                 )
                 .decode("utf-8")
                 .splitlines()
-                if status[0:2] not in {"??", "!!"}
+                if status[0] not in {"?", "!"}
             )
         )

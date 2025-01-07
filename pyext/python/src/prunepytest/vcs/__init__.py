@@ -12,6 +12,9 @@ class VCS(ABC):
     def commit_id(self) -> str: ...
 
     @abstractmethod
+    def recent_commits(self, n: int) -> List[str]: ...
+
+    @abstractmethod
     def is_repo_clean(self) -> bool: ...
 
     @abstractmethod
