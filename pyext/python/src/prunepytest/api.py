@@ -275,19 +275,19 @@ class PluginHook(BaseHook, TrackerMixin, metaclass=ABCMeta):
         """
         return frozenset()
 
-    def filter_irrelevant_files(self, files: Set[str]) -> Set[str]:
+    def filter_irrelevant_files(self, files: AbstractSet[str]) -> AbstractSet[str]:
         """
         given a set of files, filter out those that are deemed irrelevant for
         testing purposes.
 
-        By default prunepytest operates very conservatively, and will disable
+        By default, prunepytest operates very conservatively, and will disable
         test pruning if the set of modified files includes files outside of the
         Python import graph.
 
         Typically, documentation and other files that are neither code, nor data
-        used by the code, can be ignored for the the purpose of test selection.
-        However what files are safe to ignore can vary widely depending between
-        projects, so the default implementation is a no-op, to prioritize safety
+        used by the code, can be ignored for the purpose of test selection.
+        However, what files are safe to ignore can vary widely between projects,
+        so the default implementation is a no-op, to prioritize safety
         over maximum test pruning. A custom implementation allows more commits to
         leverage test pruning
         """

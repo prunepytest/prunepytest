@@ -41,6 +41,20 @@ def pytest_addoption(parser: Any, pluginmanager: pytest.PytestPluginManager) -> 
     )
 
     group.addoption(
+        "--prune-impact",
+        action="store_true",
+        dest="prune_impact",
+        help=("Whether to do impact computation (in collect-only mode)"),
+    )
+
+    group.addoption(
+        "--prune-commit-list",
+        action="store",
+        dest="prune_commit_list",
+        help=("Path to a file holding a list of commit hashes, 1 per line"),
+    )
+
+    group.addoption(
         "--prune-no-validate",
         action="store_true",
         dest="prune_novalidate",
@@ -117,15 +131,13 @@ def pytest_configure(config: pytest.Config) -> None:
     if not opt.prune:
         return
 
+    impact_only = False
     # Skip this plugin entirely when only doing collection.
     if config.getvalue("collectonly"):
-        return
-
-    # old versions of pluggy do not have force_exception...
-    import pluggy  # type: ignore[import-untyped]
-
-    if pluggy.__version__ < "1.2":
-        raise ValueError("prunepytest requires pluggy>=1.2")
+        if opt.prune_impact:
+            impact_only = True
+        else:
+            return
 
     vcs = detect_vcs()
 
@@ -148,6 +160,18 @@ def pytest_configure(config: pytest.Config) -> None:
         hook = hook_default(config.rootpath, DefaultHook)
 
     graph = GraphLoader(config, hook, graph_path, graph_root)
+
+    if impact_only:
+        if not vcs:
+            raise ValueError("No VCS detected")
+
+        from .selector import PruneImpact
+
+        config.pluginmanager.register(
+            PruneImpact(hook, graph, rel_root, vcs, opt.prune_commit_list),
+            "PruneValidator",
+        )
+        return
 
     if not opt.prune_novalidate:
         from .validator import PruneValidator
