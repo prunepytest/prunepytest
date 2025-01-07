@@ -18,13 +18,13 @@ from _pytest.config import ExitCode
 from ..api import BaseHook, PluginHook
 from ..graph import ModuleGraph
 from ..vcs import VCS
-from .util import actual_test_file, GraphLoader
+from .util import actual_test_file, _XdistHelper, GraphLoader
 
 
 UNSET: AbstractSet[str] = frozenset()
 
 
-class _BaseSelector:
+class _BaseSelector(_XdistHelper):
     def __init__(
         self,
         config: pytest.Config,
@@ -32,9 +32,9 @@ class _BaseSelector:
         graph: GraphLoader,
         rel_root: pathlib.Path,
     ) -> None:
+        super().__init__(graph)
         self.config = config
         self.hook = hook
-        self.graph = graph
         self.rel_root = rel_root
 
         self.rootpath = str(config.rootpath)
@@ -47,6 +47,13 @@ class _BaseSelector:
         self.has_unhandled_dyn_imports: AbstractSet[str] = UNSET
 
         self.test_files: Set[str] = set()
+
+    @pytest.hookimpl(trylast=True)  # type: ignore
+    def pytest_sessionfinish(
+        self, session: pytest.Session, exitstatus: ExitCode
+    ) -> None:
+        if exitstatus == ExitCode.NO_TESTS_COLLECTED:
+            session.exitstatus = ExitCode.OK
 
     def file_cache_key(self, item: pytest.Item) -> _pytest.nodes.Node:
         if isinstance(item, (pytest.Function, _pytest.unittest.TestCaseFunction)):
@@ -164,7 +171,7 @@ class PruneSelector(_BaseSelector):
         super().__init__(config, hook, graph, rel_root)
         self.modified = modified
 
-    @pytest.hookimpl(trylast=True)  # type: ignore
+    @pytest.hookimpl(tryfirst=True)  # type: ignore
     def pytest_collection_modifyitems(
         self, session: pytest.Session, config: pytest.Config, items: List[pytest.Item]
     ) -> None:
@@ -195,13 +202,6 @@ class PruneSelector(_BaseSelector):
 
         if config.option.verbose >= 1:
             print(f"prunepytest: skipped={len(skipped)}/{n}")
-
-    @pytest.hookimpl(trylast=True)  # type: ignore
-    def pytest_sessionfinish(
-        self, session: pytest.Session, exitstatus: ExitCode
-    ) -> None:
-        if exitstatus == ExitCode.NO_TESTS_COLLECTED:
-            session.exitstatus = ExitCode.OK
 
 
 class PruneImpact(_BaseSelector):
@@ -234,7 +234,7 @@ class PruneImpact(_BaseSelector):
         self.vcs = vcs
         self.commits = commits
 
-    @pytest.hookimpl(trylast=True)  # type: ignore
+    @pytest.hookimpl(tryfirst=True)  # type: ignore
     def pytest_collection_modifyitems(
         self, session: pytest.Session, config: pytest.Config, items: List[pytest.Item]
     ) -> None:
@@ -250,7 +250,7 @@ class PruneImpact(_BaseSelector):
         for c in self.commits:
             modified = set(self.vcs.modified_files(commit_id=c))
 
-            if config.option.verbose >= 1:
+            if config.option.verbose > 1:
                 print(f"{c}:{modified}")
 
             affected = g.affected_by_files(modified) | modified
@@ -306,7 +306,10 @@ class PruneImpact(_BaseSelector):
         if hasattr(statistics, "quantiles"):
             print(
                 " - deciles of gain:",
-                [f"{x:.1%}" for x in statistics.quantiles(relgain, n=10)],
+                [
+                    f"{x:.1%}"
+                    for x in statistics.quantiles(relgain, n=10, method="inclusive")
+                ],
             )
 
         # deselect everything to prevent running tests

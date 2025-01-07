@@ -7,7 +7,7 @@ or backwards compatibility, even across patch releases.
 
 import os
 
-from typing import cast, Optional, Tuple
+from typing import cast, Any, Generator, Optional, Tuple
 
 import pytest
 import _pytest.unittest
@@ -31,7 +31,11 @@ except ImportError:
 
 def safe_is_xdist_controller(session: pytest.Session) -> bool:
     try:
-        return cast(bool, is_xdist_controller(session))
+        # NB: dsession is the name used by pytest-xdist to manage distributed testing
+        # check if the plugin is active before attempting to assess controller status
+        return session.config.pluginmanager.hasplugin("dsession") and cast(
+            bool, is_xdist_controller(session)
+        )
     except AttributeError:
         # if the plugin is present but explicitly disabled...
         return False
@@ -116,3 +120,33 @@ class GraphLoader:
                 graph.to_file(self.graph_path)
 
         return graph
+
+
+class _XdistHelper:
+    def __init__(
+        self,
+        graph: GraphLoader,
+    ) -> None:
+        self.graph = graph
+
+        # pytest-xdist is a pain to deal with:
+        # the controller and each worker get an independent instance of the plugin
+        # then the controller mirrors all the hook invocations of *every* worker,
+        # interleaved in arbitrary order. To avoid creating nonsensical internal
+        # state, we need to skip some hook processing on the controller
+        # Unfortunately, the only reliable way to determine worker/controller context,
+        # is by checking the Session object, which is created after the hook object,
+        # and not passed to every hook function, so we have to detect context on the
+        # first hook invocation, and refer to it in subsequent invocations.
+        self.is_controller = False
+
+    @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
+    def pytest_sessionstart(
+        self, session: pytest.Session
+    ) -> Generator[Any, None, None]:
+        if safe_is_xdist_controller(session):
+            self.is_controller = True
+            # ensure the import graph is computed before the workers need it
+            self.graph.get(session)
+
+        return (yield)

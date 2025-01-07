@@ -162,14 +162,22 @@ def pytest_configure(config: pytest.Config) -> None:
     if graph_path and not os.path.isfile(graph_path):
         graph_path = None
 
-    if has_xdist and config.pluginmanager.has_plugin("xdist"):
-        graph_path = add_xdist_hook(config, graph_path)
-
     if opt.prune_hook:
         hook = load_hook(config.rootpath, opt.prune_hook, PluginHook)  # type: ignore[type-abstract]
         hook.setup()
     else:
         hook = hook_default(config.rootpath, DefaultHook)
+
+    if impact_only:
+        # NB: dsession is the name used by pytest-xdist to manage distributed testing
+        # in impact analysis mode, we forcefully disable distributed session, as they
+        # add overhead (doing collection multiple times), provide no benefit (we skip
+        # all tests) and make it hard for the collection to emit console output
+        config.pluginmanager.set_blocked("dsession")
+    elif has_xdist and config.pluginmanager.has_plugin("xdist"):
+        # if xdist is enabled, register an extra xdist-specific hook to ensure we only
+        # compute import graph once in the controller, and pass it to every worker node
+        graph_path = add_xdist_hook(config, graph_path)
 
     graph = GraphLoader(config, hook, graph_path, graph_root)
 

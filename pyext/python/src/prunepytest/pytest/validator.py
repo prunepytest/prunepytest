@@ -19,7 +19,7 @@ from typing import Any, AbstractSet, Generator, Optional
 
 from ..api import PluginHook
 from ..tracker import Tracker, relevant_frame_index, warning_skip_level
-from .util import GraphLoader, actual_test_file, safe_is_xdist_controller
+from .util import GraphLoader, _XdistHelper, actual_test_file
 
 
 class UnexpectedImportException(AssertionError):
@@ -31,7 +31,7 @@ def raise_(e: BaseException) -> None:
     raise e
 
 
-class PruneValidator:
+class PruneValidator(_XdistHelper):
     """
     pytest hooks to validate that each test case only imports a subset of the modules
     that the file it is part of is expected to depend on
@@ -43,8 +43,8 @@ class PruneValidator:
     def __init__(
         self, hook: PluginHook, graph: GraphLoader, rel_root: pathlib.Path
     ) -> None:
+        super().__init__(graph)
         self.hook = hook
-        self.graph = graph
         self.rel_root = rel_root
         self.tracker = Tracker()
         self.tracker.start_tracking(
@@ -58,34 +58,11 @@ class PruneValidator:
             log_file=hook.tracker_log(),
         )
 
-        # pytest-xdist is a pain to deal with:
-        # the controller and each worker get an independent instance of the plugin
-        # then the controller mirrors all the hook invocations of *every* worker,
-        # interleaved in arbitrary order. To avoid creating nonsensical internal
-        # state, we need to skip some hook processing on the controller
-        # Unfortunately, the only reliable way to determine worker/controller context,
-        # is by checking the Session object, which is created after the hook object,
-        # and not passed to every hook function, so we have to detect context on the
-        # first hook invocation, and refer to it in subsequent invocations.
-        self.is_controller = False
-
         # we track imports at module granularity, but we have to run validation at
         # test item granularity to be able to accurately attach warnings and errors
         self.current_file: Optional[str] = None
         self.expected_imports: Optional[AbstractSet[str]] = None
-
         self.always_run = hook.always_run()
-
-    @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
-    def pytest_sessionstart(
-        self, session: pytest.Session
-    ) -> Generator[Any, None, None]:
-        if safe_is_xdist_controller(session):
-            self.is_controller = True
-            # ensure the import graph is computed before the workers need it
-            self.graph.get(session)
-
-        return (yield)
 
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)  # type: ignore
     def pytest_sessionfinish(
