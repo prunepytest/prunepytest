@@ -104,7 +104,9 @@ if [[ -n "${EXTRA_TESTS:-}" ]] ; then
   export PY_COVERAGE_OUT="$(pwd)/cov.extra.json"
   ${EXTRA_TESTS}
 
-  python -m slipcover --out cov.merged.json --merge pyext/cov.main.json cov.extra.json
+  if  [[ "${PY_COVERAGE}" == "1" ]] ; then
+    python -m slipcover --out cov.merged.json --merge pyext/cov.main.json cov.extra.json
+  fi
   # TODO: show report for merged coverage file
 fi
 
