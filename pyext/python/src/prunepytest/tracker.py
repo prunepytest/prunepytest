@@ -477,7 +477,11 @@ class Tracker:
         has_err = False
         try:
             # forward to real implementation
-            m = self.old_find_and_load(name, import_)
+            m = (
+                self.old_find_and_load(name, import_)
+                if new_context
+                else self._cycle_marker(name, import_)
+            )
 
             # maintain a mapping of file path to module name
             # this is later used to map filepath from stack frame to module
@@ -552,6 +556,15 @@ class Tracker:
                 # remove it to avoid reporting spurious dependencies
                 # TODO: track "optional" deps separately?
                 self.cxt.discard(name)
+
+    def _cycle_marker(self, name: str, import_: Any) -> Any:
+        """
+        helper for stack frame bookkeeping in record_dynamic_imports
+        this method will be present immediately after _find_and_load_helper
+        if an only if the name was already tracked and no new stack entry was
+        added
+        """
+        return self.old_find_and_load(name, import_)
 
     def add_dynamic_usage_recorder(
         self, module: types.ModuleType, module_name: str, fn_name: str
@@ -680,9 +693,14 @@ class Tracker:
         fresh_import = False
 
         for i, frame in enumerate(tb[:found]):
-            if frame.filename == __file__ and frame.name == "_find_and_load_helper":
-                stack_off += 1
-                fresh_import = True
+            if frame.filename == __file__:
+                if frame.name == "_find_and_load_helper":
+                    stack_off += 1
+                    fresh_import = True
+                elif frame.name == "_cycle_marker":
+                    stack_off -= 1
+                continue
+
             # wait for the first sign of module-level code execution
             # NB: this is more robust than just filtering for ignored frames by file
             # because there might be any number of hooks/patches on top of the regular
