@@ -36,6 +36,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55cc3b69f167a1ef2e161439aa98aed94e6028e5f9a59be9a6ffb47aef1651f9"
 
 [[package]]
+name = "anyhow"
+version = "1.0.95"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -139,6 +145,7 @@ dependencies = [
 name = "common"
 version = "0.6.4+git"
 dependencies = [
+ "anyhow",
  "dashmap",
  "divan",
  "hi_sparse_bitset",
@@ -151,7 +158,6 @@ dependencies = [
  "ruff_text_size",
  "speedy",
  "ustr",
- "walkdir",
  "zstd",
 ]
 
@@ -526,6 +532,7 @@ dependencies = [
 name = "pyext"
 version = "0.6.4+git"
 dependencies = [
+ "anyhow",
  "common",
  "fern",
  "log",
@@ -539,6 +546,7 @@ version = "0.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e484fd2c8b4cb67ab05a318f1fd6fa8f199fcc30819f08f07d200809dba26c15"
 dependencies = [
+ "anyhow",
  "cfg-if",
  "indoc",
  "libc",

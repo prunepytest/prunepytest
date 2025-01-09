@@ -16,6 +16,7 @@ common = { path = "common" }
 cmd = { path = "cmd" }
 pyext = { path = "pyext" }
 
+anyhow = "1.0"
 walkdir = "2.5"
 ignore = "0.4.23"
 log = "0.4.22"

@@ -11,7 +11,7 @@ repository = { workspace = true }
 [lib]
 
 [dependencies]
-walkdir = { workspace = true }
+anyhow = { workspace = true }
 ignore = { workspace = true }
 dashmap = { workspace = true }
 ustr = { workspace = true }

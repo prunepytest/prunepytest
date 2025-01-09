@@ -54,22 +54,20 @@ impl ModuleGraph {
         dynamic_deps: HashMap<String, HashSet<String>>,
         include_typechecking: bool,
     ) -> PyResult<ModuleGraph> {
-        let tc = py
-            .allow_threads(|| {
-                let g = graph::ModuleGraph::new(
-                    source_roots,
-                    global_prefixes,
-                    local_prefixes,
-                    external_prefixes,
-                );
-                g.parse_parallel(include_typechecking)?;
-                if !dynamic_deps.is_empty() {
-                    g.add_dynamic_dependencies(dynamic_deps);
-                }
-                Ok(g.finalize())
-            })
-            .map_err(|e: parser::Error| PyErr::new::<PyException, _>(e.to_string()))?;
-        Ok(ModuleGraph { tc })
+        let tc: Result<TransitiveClosure, anyhow::Error> = py.allow_threads(|| {
+            let g = graph::ModuleGraph::new(
+                source_roots,
+                global_prefixes,
+                local_prefixes,
+                external_prefixes,
+            );
+            g.parse_parallel(include_typechecking)?;
+            if !dynamic_deps.is_empty() {
+                g.add_dynamic_dependencies(dynamic_deps);
+            }
+            Ok(g.finalize())
+        });
+        Ok(ModuleGraph { tc: tc? })
     }
 
     #[pyo3(signature = ())]

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
+use anyhow::Context;
 use regex::Regex;
 use ruff_python_ast::visitor::source_order::{walk_expr, walk_stmt, SourceOrderVisitor};
 use ruff_python_ast::{Expr, ExprCall, Stmt};
@@ -187,10 +188,12 @@ pub fn content_looks_like_pkgutil_ns_init(source: &str) -> bool {
     RE.is_match_at(source, 0)
 }
 
-pub fn file_looks_like_pkgutil_ns_init(filepath: &str) -> Result<bool, Error> {
+pub fn file_looks_like_pkgutil_ns_init(filepath: &str) -> Result<bool, anyhow::Error> {
     Ok(filepath.ends_with("__init__.py")
         && fs::exists(filepath).unwrap_or(false)
-        && content_looks_like_pkgutil_ns_init(&read_to_string(filepath).map_err(Error::IO)?))
+        && content_looks_like_pkgutil_ns_init(
+            &read_to_string(filepath).with_context(|| format!("Failed to read {}", filepath))?,
+        ))
 }
 
 pub fn raw_get_all_imports(
@@ -198,8 +201,9 @@ pub fn raw_get_all_imports(
     module: &str,
     deep: bool,
     include_typechecking: bool,
-) -> Result<(bool, Vec<String>), Error> {
-    let source = read_to_string(filepath).map_err(Error::IO)?;
+) -> Result<(bool, Vec<String>), anyhow::Error> {
+    let source =
+        read_to_string(filepath).with_context(|| format!("Failed to read {}", filepath))?;
     if filepath.ends_with(".pyx") {
         // TODO: extend ruff parser to support parsing *.pyx files
         // or do a best-effort string extraction...
@@ -208,6 +212,6 @@ pub fn raw_get_all_imports(
     Ok((
         filepath.ends_with("__init__.py") && content_looks_like_pkgutil_ns_init(&source),
         raw_imports_from_module(&source, module, deep, include_typechecking)
-            .map_err(Error::Parse)?,
+            .with_context(|| format!("failed to parse {}", filepath))?,
     ))
 }

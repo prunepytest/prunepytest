@@ -2,11 +2,11 @@
 
 use crate::matcher::MatcherNode;
 use crate::moduleref::{LockedModuleRefCache, ModuleRef, ModuleRefCache};
-use crate::parser;
 use crate::parser::raw_get_all_imports;
 use crate::transitive_closure::TransitiveClosure;
+use anyhow::Context;
 use dashmap::{DashMap, Entry};
-use ignore::{DirEntry, WalkBuilder, WalkState};
+use ignore::{DirEntry, Error, WalkBuilder, WalkState};
 use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
@@ -411,7 +411,7 @@ impl ModuleGraph {
         }
     }
 
-    pub fn parse_parallel(&self, include_typechecking: bool) -> Result<(), parser::Error> {
+    pub fn parse_parallel(&self, include_typechecking: bool) -> Result<(), anyhow::Error> {
         let parallelism = thread::available_parallelism().unwrap().get();
 
         let mut package_it = self.source_roots.keys();
@@ -428,7 +428,7 @@ impl ModuleGraph {
             prefixes.insert(n.clone());
         });
 
-        let (tx, rx) = mpsc::channel::<parser::Error>();
+        let (tx, rx) = mpsc::channel::<anyhow::Error>();
 
         // NB: we have to disable handling of .gitignore because
         // some real smart folks have ignore patterns that match
@@ -442,8 +442,15 @@ impl ModuleGraph {
                 let tx = tx.clone();
                 Box::new(move |r| match r {
                     Err(err) => {
-                        tx.send(parser::Error::IO(err.into_io_error().unwrap()))
-                            .unwrap();
+                        tx.send(match err {
+                            Error::WithPath { ref path, err } => err
+                                .io_error()
+                                .with_context(|| format!("failed to walk {}", path.display()))
+                                .err()
+                                .unwrap(),
+                            _ => err.io_error().with_context(|| "").err().unwrap(),
+                        })
+                        .unwrap();
                         WalkState::Quit
                     }
                     Ok(e) => self.parse_one_file(e, include_typechecking, &tx),
@@ -525,7 +532,7 @@ impl ModuleGraph {
         &self,
         e: DirEntry,
         include_typechecking: bool,
-        tx: &mpsc::Sender<parser::Error>,
+        tx: &mpsc::Sender<anyhow::Error>,
     ) -> WalkState {
         let filepath = e.path().to_str().unwrap();
         if filepath.ends_with(".py") {

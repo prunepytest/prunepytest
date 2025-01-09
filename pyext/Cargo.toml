@@ -13,8 +13,9 @@ name = "prunepytest"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = {  version = "0.23.3", features = ["abi3-py37", "extension-module"] }
+pyo3 = {  version = "0.23.3", features = ["abi3-py37", "anyhow", "extension-module"] }
 common = { workspace = true }
+anyhow = { workspace = true }
 log = { workspace = true }
 fern = { workspace = true }
 ustr = { workspace = true }
