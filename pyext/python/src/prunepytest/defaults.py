@@ -120,9 +120,18 @@ def filter_packages(
     # TODO: support poetry/hatch/pdm/...?
     filtered = pkg_roots
 
+    f = toml_xtract(pyproject, "tool.setuptools.packages.find.where")
+    if f:
+        print(f"filter pkg roots according to setuptools.packages.find.where: {f}")
+        filtered = {
+            p
+            for p in filtered
+            if any(p.is_relative_to(pathlib.Path(search_path)) for search_path in f)
+        }
+
     f = toml_xtract(pyproject, "tool.setuptools.packages.find.include")
     if f:
-        print(f"filter pkg roots according to setuptools config: {f}")
+        print(f"filter pkg roots according to setuptools.packages.find.include: {f}")
         filtered = {
             p
             for p in filtered
@@ -193,6 +202,9 @@ def hook_default(
         test_folders = {p: infer_py_pkg(p) for p in tst_paths}
 
     tst_file_pattern = toml_xtract(pyproj, "tool.pytest.ini_options.python_files")
+    # FIXME: should we support lists fully instead of picking the first pattern?
+    if isinstance(tst_file_pattern, list):
+        tst_file_pattern = next(p for p in tst_file_pattern if "*" in p)
 
     print(
         f"default hook: {global_ns}, {local_ns}, {source_roots}, {test_folders}, {tst_file_pattern}"
