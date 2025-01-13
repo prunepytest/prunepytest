@@ -52,7 +52,7 @@ def recursive_import_tests(
     NB: all __init__.py are imported, even in packages that do not actually contain any
     test code.
     """
-    imported = set()
+    imported: Set[str] = set()
 
     # process __init__.py first if present
     init_py = os.path.join(path, "__init__.py")
@@ -66,6 +66,9 @@ def recursive_import_tests(
         except BaseException as ex:
             # NB: this should not happen, report so it can be fixed and proceed
             errors[init_py] = ex
+    else:
+        # stop recursion if not a python package
+        return imported
 
     with os.scandir(path) as it:
         for e in it:
@@ -204,6 +207,7 @@ def validate(
         implicit_anchor_aggregation=hook.implicit_anchor_aggregation(),
         dynamic_anchors=hook.dynamic_anchors(),
         dynamic_ignores=hook.dynamic_ignores(),
+        ignore_prefixes=hook.external_imports(),
         log_file=hook.tracker_log(),
     )
 

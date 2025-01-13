@@ -54,6 +54,7 @@ class PruneValidator(_XdistHelper):
             implicit_anchor_aggregation=hook.implicit_anchor_aggregation(),
             dynamic_anchors=hook.dynamic_anchors(),
             dynamic_ignores=hook.dynamic_ignores(),
+            ignore_prefixes=hook.external_imports(),
             # TODO: override from pytest config?
             log_file=hook.tracker_log(),
         )

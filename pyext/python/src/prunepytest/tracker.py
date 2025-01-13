@@ -174,6 +174,7 @@ class Tracker:
         "file_to_module",
         "log_file",
         "prefixes",
+        "ignore_prefixes",
         "patches",
         "import_callback",
         "implicit_anchor_aggregation",
@@ -201,6 +202,7 @@ class Tracker:
         self.file_to_module: Dict[str, str] = {}
         self.log_file: Union[None, io.IOBase] = None
         self.prefixes: AbstractSet[str] = set()
+        self.ignore_prefixes: AbstractSet[str] = frozenset()
         self.patches: Optional[Mapping[str, Any]] = None
         # for use by pytest plugin
         self.import_callback: Optional[Callable[[str], None]] = None
@@ -214,6 +216,7 @@ class Tracker:
         dynamic_anchors: Optional[Mapping[str, AbstractSet[str]]] = None,
         dynamic_ignores: Optional[Mapping[str, AbstractSet[str]]] = None,
         log_file: Union[None, str, io.IOBase] = None,
+        ignore_prefixes: Optional[AbstractSet[str]] = None,
     ) -> None:
         # The usual "public" hook is builtins.__import__
         # Hooking in there is not great for our purpose as it only catches
@@ -237,6 +240,12 @@ class Tracker:
         self.old_handle_fromlist = getattr(bs, "_handle_fromlist")
 
         self.prefixes = prefixes
+        # TODO: expose and use MatcherNode from rust-side instead?
+        self.ignore_prefixes = (
+            {i for i in ignore_prefixes if any(i.startswith(p + ".") for p in prefixes)}
+            if ignore_prefixes
+            else frozenset()
+        )
         self.patches = patches
         self.dynamic_anchors = dynamic_anchors or {}
         self.dynamic_ignores = dynamic_ignores or {}
@@ -259,7 +268,9 @@ class Tracker:
             """
             # only track relevant namespace
             base_ns = name.partition(".")[0]
-            if base_ns not in self.prefixes:
+            if base_ns not in self.prefixes or any(
+                name.startswith(i) for i in self.ignore_prefixes
+            ):
                 return self.old_find_and_load(name, import_)
 
             dynamic_idx, dynamic_anchor, is_ignored = (
