@@ -144,6 +144,7 @@ def test_file_depends_on_everything(g_everything):
         "prunepytest.util",
         "importlib",
         "__import__",
+        "pytest",
     }
     assert g.file_depends_on("prunepytest.plugin") is None
     assert g.file_depends_on(p("tests/prunepytest/test_tracker.py")) == {
@@ -294,6 +295,7 @@ def test_module_depends_on_everything(g_everything):
         "prunepytest.util",
         "importlib",
         "__import__",
+        "pytest",
     }
     assert g.module_depends_on(p("src/prunepytest/pytest/plugin.py")) is None
     assert g.module_depends_on("tests.prunepytest.test_tracker", "tests") == {

@@ -15,6 +15,16 @@ import traceback
 
 from typing import Callable, Dict, List, Set, Optional, Tuple
 
+try:
+    import pytest
+
+    SkippedTest = pytest.skip.Exception
+except ImportError:
+
+    class SkippedTest(Exception):  # type: ignore[no-redef]
+        pass
+
+
 from .args import Arg, parse_args
 from .graph import ModuleGraph
 from .api import ValidatorHook
@@ -84,6 +94,9 @@ def recursive_import_tests(
                         fq, hook.should_capture_stdout(), hook.should_capture_stderr()
                     )
                     imported.add(fq)
+                except SkippedTest:
+                    # pytest.importorskip ...
+                    pass
                 except BaseException as ex:
                     # NB: this should not happen, report so it can be fixed and proceed
                     errors[e.path] = ex
