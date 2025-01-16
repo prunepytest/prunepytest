@@ -127,7 +127,17 @@ def _builtins_import_no_cache(
     fromlist: Sequence[str] = (),
     level: int = 0,
 ) -> Any:
-    return importlib.__import__(name, globals, locals, fromlist, level)
+    try:
+        return importlib.__import__(name, globals, locals, fromlist, level)
+    except ModuleNotFoundError as e:
+        # to minimize disruption, we want to produce a clean stack trace on
+        # import error. This is important because some code behaves differently
+        # depending on the shape of the error trace, e.g. flask has some tests
+        # that fail if the stack trace is too deep in case of import error...
+        # TODO: instead check number of occurrences of _find_and_load
+        if e.name == name or e.name == name.rpartition(".")[1]:
+            e.__traceback__ = None
+        raise
 
 
 # Some relevant documentation:
