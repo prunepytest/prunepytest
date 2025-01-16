@@ -197,9 +197,16 @@ def hook_default(
         if not isinstance(tst_paths, list):
             tst_paths = [tst_paths]
         print(f"use testpaths from pyproject.toml: {tst_paths}")
-        # TODO: ensure that those are included in source roots
         # TODO: merge instead of overriding?
         test_folders = {p: infer_py_pkg(p) for p in tst_paths}
+        # ensure that those folders are included in source roots
+        for fs, py in test_folders.items():
+            local_ns.add(py.partition(".")[0])
+            # NB: only add source root if it's not a subdir of existing roots
+            if fs not in source_roots and not any(
+                fs.startswith(r + os.path.sep) for r in source_roots
+            ):
+                source_roots[fs] = py
 
     tst_file_pattern = toml_xtract(pyproj, "tool.pytest.ini_options.python_files")
     # FIXME: should we support lists fully instead of picking the first pattern?
