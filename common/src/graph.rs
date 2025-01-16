@@ -532,7 +532,7 @@ impl ModuleGraph {
         &self,
         e: DirEntry,
         include_typechecking: bool,
-        tx: &mpsc::Sender<anyhow::Error>,
+        _tx: &mpsc::Sender<anyhow::Error>,
     ) -> WalkState {
         let filepath = e.path().to_str().unwrap();
         if filepath.ends_with(".py") {
@@ -578,8 +578,10 @@ impl ModuleGraph {
                 WalkState::Continue
             }
             Err(err) => {
-                tx.send(err).unwrap();
-                WalkState::Quit
+                warn!("{}: {}", filepath, err);
+                // which parse errors should abort the creation of the import graph?
+                //tx.send(err).unwrap();
+                WalkState::Continue
             }
         }
     }
