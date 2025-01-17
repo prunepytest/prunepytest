@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   linters:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -139,9 +139,9 @@ jobs:
       matrix:
         python-version: ["3.7"]
         platform:
-          - runner: windows-latest
+          - runner: windows-2019
             target: x64
-          - runner: windows-latest
+          - runner: windows-2019
             target: x86
     steps:
       - uses: actions/checkout@v4
