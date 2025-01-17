@@ -1,17 +1,19 @@
 # SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
-from typing import Mapping, AbstractSet, Optional, Sequence, Tuple, Union
+from typing import Mapping, AbstractSet, Optional, Sequence, Tuple, Union, Type, TypeVar
+
+T = TypeVar("T", bound="ModuleGraph")
 
 class ModuleGraph:
-    def __init__(
-        self,
+    def __new__(
+        cls: Type[T],
         source_roots: Mapping[str, str],
         global_prefixes: AbstractSet[str],
         local_prefixes: AbstractSet[str],
         external_prefixes: AbstractSet[str],
         dynamic_deps: Mapping[str, AbstractSet[str]],
         include_typechecking: bool = False,
-    ): ...
+    ) -> T: ...
     def clone(self) -> "ModuleGraph": ...
     @classmethod
     def from_file(self, filepath: str) -> "ModuleGraph": ...
