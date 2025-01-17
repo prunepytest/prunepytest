@@ -124,9 +124,47 @@ class Git(VCS):
             )
         )
 
+    def _parents(self, commit_id: str) -> List[str]:
+        return (
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    "-s",
+                    "--pretty=%P",
+                    commit_id,
+                ],
+                stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+            .decode("utf-8")
+            .split()
+        )
+
+    def _merge_base(self, commits: List[str]) -> str:
+        return (
+            subprocess.check_output(
+                [
+                    "git",
+                    "merge-base",
+                    *commits,
+                ],
+                stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+            .decode("utf-8")
+            .rstrip()
+        )
+
     def modified_files(
         self, commit_id: str = "HEAD", base_commit: Optional[str] = None
     ) -> List[str]:
+        if not base_commit:
+            parents = self._parents(commit_id)
+            if len(parents) > 1:
+                # merge commit, set the merge base of all parents as the base commit
+                base_commit = self._merge_base(parents)
+
         return list(
             itertools.chain.from_iterable(
                 # remove status, strip whitespaces, and split to catch both sides of renames
