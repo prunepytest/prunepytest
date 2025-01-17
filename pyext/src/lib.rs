@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: © 2024 Hugues Bruant <hugues.bruant@gmail.com>
 
 use log::ParseLevelError;
-use pyo3::exceptions::{PyException, PyTypeError};
+use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::marker::Ungil;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyNone, PySequence, PySet, PyString};
@@ -54,6 +54,15 @@ impl ModuleGraph {
         dynamic_deps: HashMap<String, HashSet<String>>,
         include_typechecking: bool,
     ) -> PyResult<ModuleGraph> {
+        if global_prefixes
+            .intersection(&local_prefixes)
+            .next()
+            .is_some()
+        {
+            return Err(PyValueError::new_err(
+                "local and global prefixes must be disjoint",
+            ));
+        }
         let tc: Result<TransitiveClosure, anyhow::Error> = py.allow_threads(|| {
             let g = graph::ModuleGraph::new(
                 source_roots,

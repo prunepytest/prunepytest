@@ -207,12 +207,12 @@ def hook_default(
 
         # ensure that those folders are included in source roots
         for fs, py in test_folders.items():
-            local_ns.add(py.partition(".")[0])
             # NB: only add source root if it's not a subdir of existing roots
             # FIXME: what about existing roots being subdirs of the test dir?
             if fs not in source_roots and not any(
                 fs.startswith(r + os.path.sep) for r in source_roots
             ):
+                local_ns.add(py.partition(".")[0])
                 source_roots[fs] = py
 
     tst_file_pattern = toml_xtract(pyproj, "tool.pytest.ini_options.python_files")

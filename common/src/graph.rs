@@ -184,11 +184,11 @@ impl ModuleGraph {
                     let dv = self.modules_refs.get(d);
                     if let Some(dpkg) = dv.pkg {
                         if dpkg != pkg {
+                            let a = dpkg.rsplit_once(MAIN_SEPARATOR);
+                            let b = pkg.split_once(MAIN_SEPARATOR);
+                            assert!(a.is_some() && b.is_some(), "{} {}", dpkg, pkg);
                             // relaxed neighbor check
-                            assert_eq!(
-                                &dpkg[..dpkg.rfind(MAIN_SEPARATOR).unwrap()],
-                                &pkg[..pkg.rfind(MAIN_SEPARATOR).unwrap()]
-                            );
+                            assert_eq!(a.unwrap().0, b.unwrap().0,);
                         }
                     }
                 }
