@@ -26,7 +26,7 @@ impl Display for Error {
     }
 }
 
-pub fn split_at_depth(filepath: &'_ str, sep: char, depth: usize) -> (&'_ str, &'_ str) {
+pub fn split_at_depth(filepath: &'_ str, sep: char, depth: usize) -> Option<(&'_ str, &'_ str)> {
     let mut idx: usize = filepath.len();
     let mut depth: usize = depth;
     while depth != 0 {
@@ -35,12 +35,10 @@ pub fn split_at_depth(filepath: &'_ str, sep: char, depth: usize) -> (&'_ str, &
                 idx = next_idx;
                 depth -= 1;
             }
-            None => {
-                panic!("{} @ {} {}", filepath, sep, depth);
-            }
+            None => return None,
         }
     }
-    (&filepath[0..idx], &filepath[idx + 1..])
+    Some((&filepath[0..idx], &filepath[idx + 1..]))
 }
 
 fn _string_lit_arg(call: &ExprCall) -> Option<String> {
@@ -102,8 +100,12 @@ impl<'b> SourceOrderVisitor<'b> for ImportExtractor<'_> {
         } else if let Some(imp) = stmt.as_import_from_stmt() {
             let mut target = String::new();
             if imp.level > 0 {
-                let (parent, _) = split_at_depth(self.module, '.', imp.level as usize);
-                target.push_str(parent);
+                if let Some((parent, _)) = split_at_depth(self.module, '.', imp.level as usize) {
+                    target.push_str(parent);
+                } else {
+                    log::warn!("{} invalid relative import {:?}", self.module, imp);
+                    return;
+                }
             }
             if imp.module.is_some() {
                 if !target.is_empty() {
