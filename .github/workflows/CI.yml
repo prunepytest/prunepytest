@@ -35,9 +35,9 @@ jobs:
       matrix:
         python-version: ["3.7"]
         platform:
-          - runner: ubuntu-latest
+          - runner: ubuntu-20.04
             target: x86_64
-          - runner: ubuntu-latest
+          - runner: ubuntu-20.04
             target: aarch64
     steps:
       - uses: actions/checkout@v4
@@ -85,7 +85,7 @@ jobs:
       matrix:
         python-version: [ "3.9", "3.12", "3.13" ]
         platform:
-          - runner: ubuntu-latest
+          - runner: ubuntu-20.04
             target: x86_64
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +108,7 @@ jobs:
       matrix:
         python-version: [ "3.9", "3.12", "3.13" ]
         platform:
-          - runner: ubuntu-latest
+          - runner: ubuntu-20.04
             target: aarch64
     steps:
       - uses: actions/checkout@v4
@@ -226,7 +226,7 @@ jobs:
 
   release:
     name: Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs: [linux, windows, macos]
     permissions:
